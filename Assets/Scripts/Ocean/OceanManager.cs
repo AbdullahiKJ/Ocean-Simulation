@@ -20,7 +20,7 @@ public class OceanManager : MonoBehaviour
         Initialise();
     }
 
-    void Initialise()
+    public void Initialise()
     {
         // Generate the mesh for the ocean surface
         Mesh newMesh = meshGenerator.GenerateMesh(meshResolution, meshSize);

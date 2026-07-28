@@ -1,16 +1,95 @@
 using UnityEngine;
+using System.Runtime.InteropServices;
 
-public class GerstnerGeneration : MonoBehaviour
+public class GerstnerGeneration : MonoBehaviour, IWaveGeneration
 {
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
-    void Start()
+    float simulationTime = 0.0f;
+    [SerializeField] ComputeShader oceanShader;
+    ComputeBuffer waveBuffer;
+
+    Wave[] waves;
+    // Wave generation configuration
+    [SerializeField] int waveCount = 0;
+    [SerializeField] Vector2 amplitudeRange = Vector2.zero;
+    [SerializeField] Vector2 wavelengthRange = Vector2.zero;
+    [SerializeField] Vector2 steepnessRange = Vector2.zero;
+    [SerializeField] Vector2 directionRange = Vector2.zero;
+
+    // Shader
+
+    struct Wave
     {
-        
+        // Configrable parameters
+        public float amplitude;
+        public float wavelength;
+        public float steepness;
+        public Vector2 direction;
+        public float omega;
+        public float waveNumber;
     }
 
-    // Update is called once per frame
-    void Update()
+    public void Initialise()
     {
-        
+        waves = new Wave[waveCount];
+        GenerateWaveParameters();
+
+        // Upload the wave data to the buffer for use in the compute shader
+        int stride = Marshal.SizeOf(typeof(Wave));
+
+        waveBuffer = new ComputeBuffer(waveCount, stride);
+        waveBuffer.SetData(waves);
+    }
+
+    public float SampleHeight()
+    {
+        throw new System.NotImplementedException();
+    }
+
+    public Vector3 SampleNormal()
+    {
+        throw new System.NotImplementedException();
+    }
+
+    public void UpdateGenerator()
+    {
+        simulationTime += Time.deltaTime;
+    }
+
+    // Upload the wave data to the compute shader for rendering
+    public void UploadToShader(ComputeShader shader)
+    {
+        int kernel = shader.FindKernel("CSMain");
+
+        shader.SetBuffer(kernel, "_Waves", waveBuffer);
+
+        shader.SetInt("_WaveCount", waveCount);
+
+        shader.SetFloat("_Time", simulationTime);
+    }
+
+    // Generate a list of wave parameters based on the configuration ranges
+    void GenerateWaveParameters()
+    {
+        for (int i = 0; i < waveCount; i++)
+        {
+            float wavelength = Random.Range(wavelengthRange.x, wavelengthRange.y);
+            float amplitude = Random.Range(amplitudeRange.x, amplitudeRange.y);
+            float directionDeg = Random.Range(directionRange.x, directionRange.y);
+            float directionRad = directionDeg * Mathf.Deg2Rad;
+            float steepness = Random.Range(steepnessRange.x, steepnessRange.y);
+            float waveNumber = 2 * Mathf.PI / wavelength;
+
+            waves[i] = new Wave
+            {
+                amplitude = amplitude,
+                wavelength = wavelength,
+                steepness = steepness,
+
+                // Calculate derived parameters
+                waveNumber = waveNumber,
+                direction = new Vector2(Mathf.Cos(directionRad), Mathf.Sin(directionRad)),
+                omega = Mathf.Sqrt(9.81f * waveNumber),
+            };
+        }
     }
 }

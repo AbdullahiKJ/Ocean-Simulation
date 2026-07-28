@@ -1,16 +1,15 @@
 using UnityEngine;
-
-public class WaveGeneration : MonoBehaviour
+interface IWaveGeneration
 {
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
-    void Start()
-    {
-        
-    }
+    void Initialise();
+    void UpdateGenerator();
+    float SampleHeight();
+    Vector3 SampleNormal();
+}
 
-    // Update is called once per frame
-    void Update()
-    {
-        
-    }
+enum WaveGenerator
+{
+    Gerstner,
+    FFT,
+    Hybrid
 }

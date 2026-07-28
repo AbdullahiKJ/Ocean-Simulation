@@ -15,8 +15,6 @@ public class GerstnerGeneration : MonoBehaviour, IWaveGeneration
     [SerializeField] Vector2 steepnessRange = Vector2.zero;
     [SerializeField] Vector2 directionRange = Vector2.zero;
 
-    // Shader
-
     struct Wave
     {
         // Configrable parameters
@@ -28,7 +26,7 @@ public class GerstnerGeneration : MonoBehaviour, IWaveGeneration
         public float waveNumber;
     }
 
-    public void Initialise()
+    public void Initialise(int meshResolution, float meshSize)
     {
         waves = new Wave[waveCount];
         GenerateWaveParameters();

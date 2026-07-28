@@ -58,14 +58,14 @@ public class OceanManager : MonoBehaviour
         switch (activeWaveGenerator)
         {
             case WaveGenerator.Gerstner:
-                gerstnerGeneration.Initialise();
+                gerstnerGeneration.Initialise(meshResolution, meshSize);
                 break;
             case WaveGenerator.FFT:
-                // fftGeneration.Initialise();
+                // fftGeneration.Initialise(meshResolution, meshSize);
                 break;
             case WaveGenerator.Hybrid:
-                gerstnerGeneration.Initialise();
-                // fftGeneration.Initialise();
+                gerstnerGeneration.Initialise(meshResolution, meshSize);
+                // fftGeneration.Initialise(meshResolution, meshSize);
                 break;
         }
     }

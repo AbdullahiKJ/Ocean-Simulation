@@ -1,0 +1,90 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel CSMain
+
+// Wave structure to hold wave parameters
+struct Wave
+{
+    float amplitude;
+    float wavelength;
+    float steepness;
+    float2 direction;
+    float omega;
+    float waveNumber;
+};
+
+// Buffers to hold wave data and vertex positions
+StructuredBuffer<Wave> _Waves;
+
+// General buffers
+StructuredBuffer<float3> _OriginalVertices;
+RWStructuredBuffer<float3> _DisplacedVertices;
+RWStructuredBuffer<float3> _Normals;
+
+// Wave parameters
+int _WaveCount;
+float _Time;
+
+float3 EvaluateGerstner(float3 position)
+{
+    float3 displacement = float3(0,0,0);
+
+    for(int i = 0; i < _WaveCount; i++)
+    {
+        Wave wave = _Waves[i];
+
+        float phase =
+            wave.waveNumber * dot(wave.direction, position.xz)
+            - wave.omega * _Time;
+
+        displacement.x +=
+            wave.steepness *
+            wave.amplitude *
+            wave.direction.x *
+            cos(phase);
+
+        displacement.y +=
+            wave.amplitude *
+            sin(phase);
+
+        displacement.z +=
+            wave.steepness *
+            wave.amplitude *
+            wave.direction.y *
+            cos(phase);
+    }
+
+    return displacement;
+}
+
+float3 CalculateNormal(float3 position)
+{
+    float offset = 0.1;
+
+    float hL = EvaluateGerstner(position - float3(offset,0,0)).y;
+    float hR = EvaluateGerstner(position + float3(offset,0,0)).y;
+
+    float hD = EvaluateGerstner(position - float3(0,0,offset)).y;
+    float hU = EvaluateGerstner(position + float3(0,0,offset)).y;
+
+
+    float3 normal = float3(
+        hL - hR,
+        2.0 * offset,
+        hD - hU
+    );
+
+    return normalize(normal);
+}
+
+[numthreads(64,1,1)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+    uint index = id.x;
+
+    float3 vertex = _OriginalVertices[index];
+
+    vertex += EvaluateGerstner(vertex);
+    
+    _DisplacedVertices[index] = vertex;
+    _Normals[index] = CalculateNormal(vertex);
+}

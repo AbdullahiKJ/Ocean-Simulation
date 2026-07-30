@@ -1,0 +1,84 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel CSMain
+
+
+
+// Buffers to hold wave data and vertex positions
+// FFT initial and conjugate spectrum buffers
+StructuredBuffer<Complex[,]> _InitialSpectrum;
+StructuredBuffer<Comlex[,]> _ConjugateSpectrum;
+
+// General buffers
+StructuredBuffer<float3> _OriginalVertices;
+RWStructuredBuffer<float3> _DisplacedVertices;
+RWStructuredBuffer<float3> _Normals;
+
+// Wave parameters
+int _WaveCount;
+float _Time;
+float _MeshResolution;
+float _MeshSize;
+
+// FFT methods
+float2 ComplexMult(float2 a, float2 b) 
+{ 
+    return float2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x); 
+}
+
+float2 EulerFormula(float x) 
+{ 
+    return float2(cos(x), sin(x)); 
+}
+
+float3 EvaluateFFT(float3 position)
+{	
+    float2 h0 = initialSignal.rg;
+    float2 h0conj = initialSignal.ba;
+    
+    float halfN = _MeshResolution / 2.0f;
+    float2 K = (threadID.xy - halfN) * 2.0f * PI / _MeshSize;
+    float kMag = length(K);
+    float kMagRcp = rcp(kMag);
+
+    if (kMag < 0.0001f) 
+    {
+        kMagRcp = 1.0f;
+    }
+
+    float w_0 = 2.0f * PI / jonswapParams->repeatTime;
+    float dispersion = floor(sqrt(G * kMag) / w_0) * w_0 * time;
+
+    float2 exponent = EulerFormula(dispersion);
+
+    float2 htilde = ComplexMult(h0, exponent) + ComplexMult(h0conj, float2(exponent.x, -exponent.y));
+    float2 ih = float2(-htilde.y, htilde.x);
+
+	// Derivatives
+    float2 displacementX = ih * K.x * kMagRcp;
+    float2 displacementY = htilde;
+    float2 displacementZ = ih * K.y * kMagRcp;
+    float2 displacementX_dx = -htilde * K.x * K.x * kMagRcp;
+    float2 displacementY_dx = ih * K.x;
+    float2 displacementZ_dx = -htilde * K.x * K.y * kMagRcp;
+    float2 displacementY_dz = ih * K.y;
+    float2 displacementZ_dz = -htilde * K.y * K.y * kMagRcp;
+
+    float2 htildeDisplacementX = float2(displacementX.x - displacementZ.y, displacementX.y + displacementZ.x);
+    float2 htildeDisplacementZ = float2(displacementY.x - displacementZ_dx.y, displacementY.y + displacementZ_dx.x);
+        
+    float2 htildeSlopeX = float2(displacementY_dx.x - displacementY_dz.y, displacementY_dx.y + displacementY_dz.x);
+    float2 htildeSlopeZ = float2(displacementX_dx.x - displacementZ_dz.y, displacementX_dx.y + displacementZ_dz.x);
+
+    displacement_spectrum[threadID.xy] = float4(htildeDisplacementX, htildeDisplacementZ);
+    slope_spectrum[threadID.xy] = float4(htildeSlopeX, htildeSlopeZ);
+}
+
+[numthreads(64,1,1)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+    uint index = id.x;
+
+    float3 vertex = _OriginalVertices[index];
+
+    vertex += EvaluateFFT(vertex);
+}

@@ -1,5 +1,5 @@
 // Each #kernel tells which function to compile; you can have many kernels
-#pragma kernel CSMain
+#pragma kernel GerstnerMain
 
 // Wave structure to hold wave parameters
 struct Wave
@@ -84,7 +84,7 @@ void CSMain (uint3 id : SV_DispatchThreadID)
     float3 vertex = _OriginalVertices[index];
 
     vertex += EvaluateGerstner(vertex);
-    
+
     _DisplacedVertices[index] = vertex;
     _Normals[index] = CalculateNormal(vertex);
 }

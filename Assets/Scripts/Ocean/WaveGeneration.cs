@@ -7,7 +7,7 @@ interface IWaveGeneration
     Vector3 SampleNormal();
 }
 
-enum WaveGenerator
+public enum WaveGenerator
 {
     Gerstner,
     FFT,

@@ -16,7 +16,7 @@ public class OceanRenderer : MonoBehaviour
 
     int kernel;
 
-    public void Initialise(Mesh generatedMesh)
+    public void Initialise(Mesh generatedMesh, WaveGenerator activeGenerator)
     {
         // Get the mesh filter and mesh components and assign the generated mesh to the mesh filter
         meshFilter = GetComponentInChildren<MeshFilter>();
@@ -27,7 +27,18 @@ public class OceanRenderer : MonoBehaviour
         originalVertices = mesh.vertices;
         displacedVertices = new Vector3[originalVertices.Length];
 
-        kernel = oceanShader.FindKernel("CSMain");
+        switch (activeGenerator)
+        {
+            case WaveGenerator.Gerstner:
+                kernel = oceanShader.FindKernel("GerstnerMain");
+                break;
+            case WaveGenerator.FFT:
+                kernel = oceanShader.FindKernel("FFTMain");
+                break;
+            // todo: implement hybrid
+            case WaveGenerator.Hybrid:
+                break;
+        }
 
         // Create compute buffers for the original and displaced vertices and normals and asssign the data to them
         originalVertexBuffer = new ComputeBuffer(originalVertices.Length, sizeof(float) * 3);

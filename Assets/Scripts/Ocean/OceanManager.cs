@@ -6,7 +6,8 @@ public class OceanManager : MonoBehaviour
     [SerializeField] GerstnerGeneration gerstnerGeneration;
     [SerializeField] FFTGeneration fftGeneration;
     [SerializeField] WaveGenerator activeWaveGenerator;
-    [SerializeField] ComputeShader oceanShader;
+    [SerializeField] ComputeShader gerstnerComputeShader;
+    [SerializeField] ComputeShader fftComputeShader;
     [SerializeField] OceanRenderer oceanRenderer;
     ComputeBuffer waveBuffer;
 
@@ -24,7 +25,7 @@ public class OceanManager : MonoBehaviour
     {
         // Generate the mesh for the ocean surface
         Mesh newMesh = meshGenerator.GenerateMesh(meshResolution, meshSize);
-        oceanRenderer.Initialise(newMesh);
+        oceanRenderer.Initialise(newMesh, activeWaveGenerator);
         SetWaveGenerator();
     }
 
@@ -35,15 +36,18 @@ public class OceanManager : MonoBehaviour
         {
             case WaveGenerator.Gerstner:
                 gerstnerGeneration.UpdateGenerator();
-                gerstnerGeneration.UploadToShader(oceanShader);
+                gerstnerGeneration.UploadToShader(gerstnerComputeShader);
                 oceanRenderer.Render();
                 break;
             case WaveGenerator.FFT:
-                // fftGeneration.UpdateGenerator();
+                fftGeneration.UpdateGenerator();
+                fftGeneration.UploadToShader(fftComputeShader);
+                oceanRenderer.Render();
                 break;
             case WaveGenerator.Hybrid:
                 gerstnerGeneration.UpdateGenerator();
-                // fftGeneration.UpdateGenerator();
+                fftGeneration.UpdateGenerator();
+                oceanRenderer.Render();
                 break;
         }
 

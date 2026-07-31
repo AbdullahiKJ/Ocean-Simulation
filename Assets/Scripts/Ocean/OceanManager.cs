@@ -6,10 +6,7 @@ public class OceanManager : MonoBehaviour
     [SerializeField] GerstnerGeneration gerstnerGeneration;
     [SerializeField] FFTGeneration fftGeneration;
     [SerializeField] WaveGenerator activeWaveGenerator;
-    [SerializeField] ComputeShader gerstnerComputeShader;
-    [SerializeField] ComputeShader fftComputeShader;
     [SerializeField] OceanRenderer oceanRenderer;
-    ComputeBuffer waveBuffer;
 
     // Wave generation configuration
     [SerializeField] MeshGenerator meshGenerator;
@@ -25,7 +22,7 @@ public class OceanManager : MonoBehaviour
     {
         // Generate the mesh for the ocean surface
         Mesh newMesh = meshGenerator.GenerateMesh(meshResolution, meshSize);
-        oceanRenderer.Initialise(newMesh, activeWaveGenerator);
+        oceanRenderer.Initialise(newMesh, activeWaveGenerator, meshResolution);
         SetWaveGenerator();
     }
 
@@ -36,12 +33,10 @@ public class OceanManager : MonoBehaviour
         {
             case WaveGenerator.Gerstner:
                 gerstnerGeneration.UpdateGenerator();
-                gerstnerGeneration.UploadToShader(gerstnerComputeShader);
                 oceanRenderer.Render();
                 break;
             case WaveGenerator.FFT:
                 fftGeneration.UpdateGenerator();
-                fftGeneration.UploadToShader(fftComputeShader);
                 oceanRenderer.Render();
                 break;
             case WaveGenerator.Hybrid:
@@ -65,11 +60,11 @@ public class OceanManager : MonoBehaviour
                 gerstnerGeneration.Initialise(meshResolution, meshSize);
                 break;
             case WaveGenerator.FFT:
-                // fftGeneration.Initialise(meshResolution, meshSize);
+                fftGeneration.Initialise(meshResolution, meshSize);
                 break;
             case WaveGenerator.Hybrid:
                 gerstnerGeneration.Initialise(meshResolution, meshSize);
-                // fftGeneration.Initialise(meshResolution, meshSize);
+                fftGeneration.Initialise(meshResolution, meshSize);
                 break;
         }
     }

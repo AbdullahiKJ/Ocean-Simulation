@@ -4,13 +4,14 @@ using System.Numerics;
 
 public class FFTGeneration : MonoBehaviour, IWaveGeneration
 {
-    float simulationTime = 0.0f;
-    [SerializeField] ComputeShader oceanShader;
-    ComputeBuffer spectrumBuffer;
+    [SerializeField] ComputeShader fftComputeShader;
     float GRAVITY = 9.81f;
     float PI = 3.14159265359f;
     Complex[,] initialSpectrum;
     Complex[,] conjugateSpectrum;
+    Texture2D initialSpectrumTexture;
+    int resolution;
+    float size;
 
     // Wave generation configuration
     [SerializeField] float lowCutoff = 0.0f;
@@ -24,6 +25,7 @@ public class FFTGeneration : MonoBehaviour, IWaveGeneration
     [SerializeField][Range(0.0f, 360.0f)] float windDirection; // [0.0f, 360.0f]
     [SerializeField][Range(0.0f, 10000.0f)] float fetch; // Distance over which Wind impacts Wave Formation [0.0f, 10000.0f]
     [SerializeField][Range(0.0f, 100.0f)] float windSpeed; // [0.0f, 100.0f]
+    [SerializeField][Range(0.0f, 200.0f)] float repeatTime; // [0.0f, 200.0f]
     float angle;
     float alpha;
     float peakOmega;
@@ -39,7 +41,7 @@ public class FFTGeneration : MonoBehaviour, IWaveGeneration
         float windDirection; // [0.0f, 360.0f]
         float fetch; // Distance over which Wind impacts Wave Formation [0.0f, 10000.0f]
         float windSpeed; // [0.0f, 100.0f]
-
+        float repeatTime; // determines how quick the waves will animate, in relation to their displacement. [0.0f, 200.0f]
         float angle;
         float alpha;
         float peakOmega;
@@ -47,14 +49,10 @@ public class FFTGeneration : MonoBehaviour, IWaveGeneration
 
     public void Initialise(int meshResolution, float meshSize)
     {
+        resolution = meshResolution;
+        size = meshSize;
         GenerateSpectrum(meshResolution, meshSize);
-
-
-        // Upload the spectrum data to the buffer for use in the compute shader
-        int stride = sizeof(float) * 2;
-
-        spectrumBuffer = new ComputeBuffer(meshResolution * meshResolution, stride);
-        spectrumBuffer.SetData(initialSpectrum);
+        UploadToShader();
     }
 
     public float SampleHeight()
@@ -67,19 +65,22 @@ public class FFTGeneration : MonoBehaviour, IWaveGeneration
         throw new System.NotImplementedException();
     }
 
+    // todo: maybe remove this
     public void UpdateGenerator()
     {
-        simulationTime += Time.deltaTime;
     }
 
     // Upload the spectrum data to the compute shader for rendering
-    public void UploadToShader(ComputeShader shader)
+    public void UploadToShader()
     {
-        int kernel = shader.FindKernel("CSMain");
+        int advanceKernel = fftComputeShader.FindKernel("Advance");
 
-        shader.SetBuffer(kernel, "_Spectrum", spectrumBuffer);
+        // Assign textures and floats to the compute shader
+        fftComputeShader.SetTexture(advanceKernel, "_InitialSpectrumTexture", initialSpectrumTexture);
 
-        shader.SetFloat("_Time", simulationTime);
+        fftComputeShader.SetFloat("_MeshResolution", resolution);
+        fftComputeShader.SetFloat("_MeshSize", size);
+        fftComputeShader.SetFloat("_RepeatTime", repeatTime);
     }
 
     // The code below is adapted from George Bolba's implemetation of Jerry Tessendorf's Simulating Water paper
@@ -180,6 +181,8 @@ public class FFTGeneration : MonoBehaviour, IWaveGeneration
         float deltaK = 2.0f * PI / meshSize;
 
         initialSpectrum = new Complex[meshResolution, meshResolution];
+        conjugateSpectrum = new Complex[meshResolution, meshResolution];
+        initialSpectrumTexture = new Texture2D(meshResolution, meshResolution, TextureFormat.RGBAFloat, false);
 
         for (int y = 0; y < meshResolution; y++)
         {
@@ -232,7 +235,21 @@ public class FFTGeneration : MonoBehaviour, IWaveGeneration
                 int conjugateY = (meshResolution - y) % meshResolution;
 
                 conjugateSpectrum[x, y] = Complex.Conjugate(initialSpectrum[conjugateX, conjugateY]);
+
+                initialSpectrumTexture.SetPixel(
+                    x,
+                    y,
+                    new Color(
+                        (float)initialSpectrum[x, y].Real,
+                        (float)initialSpectrum[x, y].Imaginary,
+                        (float)conjugateSpectrum[x, y].Real,
+                        (float)conjugateSpectrum[x, y].Imaginary
+                    )
+                );
             }
         }
+
+        // Apply the texture
+        initialSpectrumTexture.Apply();
     }
 }

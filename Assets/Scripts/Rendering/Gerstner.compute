@@ -77,7 +77,7 @@ float3 CalculateNormal(float3 position)
 }
 
 [numthreads(64,1,1)]
-void CSMain (uint3 id : SV_DispatchThreadID)
+void GerstnerMain (uint3 id : SV_DispatchThreadID)
 {
     uint index = id.x;
 

@@ -1,37 +1,37 @@
 // Each #kernel tells which function to compile; you can have many kernels
-#pragma kernel CSMain
+#pragma kernel Advance
+#pragma kernel VerticalFFT
+#pragma kernel HorizontalFFT
+#pragma kernel FFTMain
 
+// Textures to hold spectrum and slope data
+Texture2D<float4> _InitialSpectrum;
+RWTexture2D<float4> _DisplacementSpectrum;
+RWTexture2D<float4> _SlopeSpectrum;
 
-
-// Buffers to hold wave data and vertex positions
-// FFT initial and conjugate spectrum buffers
-StructuredBuffer<Complex[,]> _InitialSpectrum;
-StructuredBuffer<Comlex[,]> _ConjugateSpectrum;
-
-// General buffers
-StructuredBuffer<float3> _OriginalVertices;
-RWStructuredBuffer<float3> _DisplacedVertices;
-RWStructuredBuffer<float3> _Normals;
+// Displacement and slope textures that will be written to
+RWTexture2D<float4> _DisplacementTexture;
+RWTexture2D<float4> _SlopeTexture;
 
 // Wave parameters
-int _WaveCount;
-float _Time;
 float _MeshResolution;
 float _MeshSize;
+float _RepeatTime;
 
-// FFT methods
-float2 ComplexMult(float2 a, float2 b) 
-{ 
-    return float2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x); 
-}
+// Constants
+float PI = 3.1415926536f;
+float G = 9.81f;
 
-float2 EulerFormula(float x) 
-{ 
-    return float2(cos(x), sin(x)); 
-}
+// The code below is adapted from George Bolba's implemetation of Jerry Tessendorf's Simulating Water paper
+float2 ComplexMult(float2 a, float2 b) { return float2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x); }
 
-float3 EvaluateFFT(float3 position)
+float2 EulerFormula(float x) { return float2(cos(x), sin(x)); }
+
+// Propagate the waves through time to obtain the displacement spectrum and calculate the slope as well
+[numthreads(8, 8, 1)]
+void Advance(uint2 threadID)
 {	
+	float4 initialSignal = _InitialSpectrum[threadID.xy];
     float2 h0 = initialSignal.rg;
     float2 h0conj = initialSignal.ba;
     
@@ -45,7 +45,7 @@ float3 EvaluateFFT(float3 position)
         kMagRcp = 1.0f;
     }
 
-    float w_0 = 2.0f * PI / jonswapParams->repeatTime;
+    float w_0 = 2.0f * PI / _RepeatTime;
     float dispersion = floor(sqrt(G * kMag) / w_0) * w_0 * time;
 
     float2 exponent = EulerFormula(dispersion);
@@ -69,16 +69,49 @@ float3 EvaluateFFT(float3 position)
     float2 htildeSlopeX = float2(displacementY_dx.x - displacementY_dz.y, displacementY_dx.y + displacementY_dz.x);
     float2 htildeSlopeZ = float2(displacementX_dx.x - displacementZ_dz.y, displacementX_dx.y + displacementZ_dz.x);
 
-    displacement_spectrum[threadID.xy] = float4(htildeDisplacementX, htildeDisplacementZ);
-    slope_spectrum[threadID.xy] = float4(htildeSlopeX, htildeSlopeZ);
+    // Store the displacement sepctrum and slope spectrums in textures
+    _DisplacementSpectrum[threadID.xy] = float4(htildeDisplacementX, htildeDisplacementZ);
+    _SlopeSpectrum[threadID.xy] = float4(htildeSlopeX, htildeSlopeZ);
 }
 
-[numthreads(64,1,1)]
-void CSMain (uint3 id : SV_DispatchThreadID)
+// Perform the inverse FFT to convert the vertical displacement and slope spectrums into the time domain
+[numthreads(512, 1, 1)]
+void VerticalFFT(uint2 threadID)
 {
-    uint index = id.x;
+    _DisplacementSpectrum[threadID.yx] = InverseFFT(threadID.x, _DisplacementSpectrum[threadID.yx]);
+    _SlopeSpectrum[threadID.yx] = InverseFFT(threadID.x, _SlopeSpectrum[threadID.yx]);
+}
 
-    float3 vertex = _OriginalVertices[index];
+// Perform the inverse FFT to convert the horizontal displacement and slope spectrums into the time domain
+[numthreads(512, 1, 1)]
+void HorizontalFFT(uint2 threadID)
+{
+    _DisplacementSpectrum[threadID] = InverseFFT(threadID.x, _DisplacementSpectrum[threadID.xy]);
+    _SlopeSpectrum[threadID] = InverseFFT(threadID.x, _SlopeSpectrum[threadID.xy]);
+}
 
-    vertex += EvaluateFFT(vertex);
+float4 Permute(float4 data, float3 id) 
+{
+    return data * (1.0f - 2.0f * ((id.x + id.y) % 2));
+}
+
+// Apply a checkerboard pattern transformation to the spectrums and generate the final displacement and slope maps
+[numthreads(8, 8, 1)]
+void FFTMain(uint3 threadID)
+{
+    const float2 Lambda = float2(1.0f, 1.0f);
+
+	float4 htildeDisplacement = Permute(_DisplacementSpectrum[threadID.xy], threadID);
+	float4 htildeSlope = Permute(_SlopeSpectrum[threadID.xy], threadID);
+	
+	float2 dxdz = htildeDisplacement.rg;
+	float2 dydxz = htildeDisplacement.ba;
+	float2 dyxdyz = htildeSlope.rg;
+	float2 dxxdzz = htildeSlope.ba;
+	
+	float3 displacement = float3(Lambda.x * dxdz.x, dydxz.x, Lambda.y * dxdz.y);
+	float2 slopes = dyxdyz.xy / (1 + abs(dxxdzz * Lambda));
+	
+	_DisplacementTexture[threadID.xy] = float4(displacement, 1.0f);
+	_SlopeTexture[threadID.xy] = float4(slopes, 0.0f, 1.0f);
 }

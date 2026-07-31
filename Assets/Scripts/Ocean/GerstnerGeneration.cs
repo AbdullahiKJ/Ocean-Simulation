@@ -3,9 +3,10 @@ using System.Runtime.InteropServices;
 
 public class GerstnerGeneration : MonoBehaviour, IWaveGeneration
 {
+    [SerializeField] ComputeShader gerstnerComputeShader;
     float simulationTime = 0.0f;
-    [SerializeField] ComputeShader oceanShader;
     ComputeBuffer waveBuffer;
+    int kernel;
 
     Wave[] waves;
     // Wave generation configuration
@@ -36,6 +37,8 @@ public class GerstnerGeneration : MonoBehaviour, IWaveGeneration
 
         waveBuffer = new ComputeBuffer(waveCount, stride);
         waveBuffer.SetData(waves);
+
+        UploadToShader();
     }
 
     public float SampleHeight()
@@ -51,18 +54,17 @@ public class GerstnerGeneration : MonoBehaviour, IWaveGeneration
     public void UpdateGenerator()
     {
         simulationTime += Time.deltaTime;
+        gerstnerComputeShader.SetFloat("_Time", simulationTime);
     }
 
     // Upload the wave data to the compute shader for rendering
-    public void UploadToShader(ComputeShader shader)
+    public void UploadToShader()
     {
-        int kernel = shader.FindKernel("CSMain");
+        kernel = gerstnerComputeShader.FindKernel("GerstnerMain");
 
-        shader.SetBuffer(kernel, "_Waves", waveBuffer);
+        gerstnerComputeShader.SetBuffer(kernel, "_Waves", waveBuffer);
 
-        shader.SetInt("_WaveCount", waveCount);
-
-        shader.SetFloat("_Time", simulationTime);
+        gerstnerComputeShader.SetInt("_WaveCount", waveCount);
     }
 
     // Generate a list of wave parameters based on the configuration ranges

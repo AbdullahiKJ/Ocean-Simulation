@@ -24,6 +24,17 @@ Shader "Custom/Ocean"
             StructuredBuffer<float3> _DisplacedVertices;
             StructuredBuffer<float3> _Normals;
 
+            Texture2D<float4> _DisplacementTexture;
+            Texture2D<float4> _SlopeTexture;
+
+            // Declare the first texture (displacement) and its sampler.
+            UNITY_DECLARE_TEX2D(_DisplacementTexture);
+
+            // Declare the second texture (slope) without samplers.
+            UNITY_DECLARE_TEX2D_NOSAMPLER(_SlopeTexture);
+
+            int _ActiveWaveGenerator;
+
             struct Attributes
             {
                 float4 positionOS : POSITION;
@@ -53,13 +64,27 @@ Shader "Custom/Ocean"
             {
                 Varyings OUT;
 
-                float3 positionOS = _DisplacedVertices[IN.vertexID];
+                float3 positionOS = new float3();
+                // Gerstner
+                if(_ActiveWaveGenerator == 0)
+                {
+                    positionOS = _DisplacedVertices[IN.vertexID];
+                    OUT.normalWS = TransformObjectToWorldNormal(_Normals[IN.vertexID]);
+                }
+                // FFT
+                else if(_ActiveWaveGenerator == 1)
+                {
+                    positionOS = UNITY_SAMPLE_TEX2D(_DisplacementTexture, IN.uv);
+                }
+                // Hybrid
+                // todo: add hybrid
+                else
+                {
+                }
 
                 OUT.positionHCS = TransformObjectToHClip(positionOS);
 
                 OUT.positionWS = TransformObjectToWorld(positionOS);
-
-                OUT.normalWS = TransformObjectToWorldNormal(_Normals[IN.vertexID]);
 
                 OUT.uv = TRANSFORM_TEX(IN.uv, _BaseMap);
 
@@ -84,7 +109,24 @@ Shader "Custom/Ocean"
 
             half4 frag(Varyings IN) : SV_Target
             {
-                float3 normal = normalize(IN.normalWS);
+                float3 normal = new float3();
+
+                // Gerstner
+                if(_ActivewaveGenerator == 0)
+                {
+                    normal = normalize(IN.normalWS);
+                }
+                // FFT
+                else if(_ActivewaveGenerator == 1)
+                {
+                    float4 slope = UNITY_SAMPLE_TEX2D_SAMPLER(_SlopeTexture, _DisplacementTexture, IN.uv);
+                    normal = normalize(float3(-slope.x, 1.0f, -slope.y));
+                }
+                // Hybrid
+                // todo: implement hybrid
+                else                
+                {    
+                }
 
                 float3 viewDir = normalize(_WorldSpaceCameraPos - IN.positionWS);
 

@@ -5,6 +5,7 @@ using System.Numerics;
 public class FFTGeneration : MonoBehaviour, IWaveGeneration
 {
     [SerializeField] ComputeShader fftComputeShader;
+    float simulationTime = 0.0f;
     float GRAVITY = 9.81f;
     float PI = 3.14159265359f;
     Complex[,] initialSpectrum;
@@ -52,6 +53,7 @@ public class FFTGeneration : MonoBehaviour, IWaveGeneration
         resolution = meshResolution;
         size = meshSize;
         GenerateSpectrum(meshResolution, meshSize);
+        GenerateLookUpTexture();
         UploadToShader();
     }
 
@@ -65,22 +67,73 @@ public class FFTGeneration : MonoBehaviour, IWaveGeneration
         throw new System.NotImplementedException();
     }
 
-    // todo: maybe remove this
     public void UpdateGenerator()
     {
+        simulationTime += Time.deltaTime;
+        fftComputeShader.SetFloat("_Time", simulationTime);
     }
 
     // Upload the spectrum data to the compute shader for rendering
     public void UploadToShader()
     {
+        // Find the advance kernel
         int advanceKernel = fftComputeShader.FindKernel("Advance");
 
         // Assign textures and floats to the compute shader
-        fftComputeShader.SetTexture(advanceKernel, "_InitialSpectrumTexture", initialSpectrumTexture);
+        fftComputeShader.SetTexture(advanceKernel, "_InitialSpectrum", initialSpectrumTexture);
 
         fftComputeShader.SetFloat("_MeshResolution", resolution);
         fftComputeShader.SetFloat("_MeshSize", size);
         fftComputeShader.SetFloat("_RepeatTime", repeatTime);
+    }
+
+    void GenerateLookUpTexture()
+    {
+        int stages = (int)Mathf.Log(resolution, 2);
+
+        Texture2D butterfly = new Texture2D(resolution, stages, TextureFormat.RGBAFloat, false);
+
+        for (int stage = 0; stage < stages; stage++)
+        {
+            int step = 1 << (stage + 1);
+
+            int halfStep = step >> 1;
+
+            for (int i = 0; i < resolution; i++)
+            {
+                int group = i / step;
+                int offset = i % step;
+
+                int even = group * step + offset % halfStep;
+                int odd = even + halfStep;
+
+                float angle = -2f * Mathf.PI * (offset % halfStep) / step;
+                float cos = Mathf.Cos(angle);
+                float sin = Mathf.Sin(angle);
+
+                float left = even / (float)(resolution - 1);
+                float right = odd / (float)(resolution - 1);
+
+                butterfly.SetPixel(
+                    i,
+                    stage,
+                    new Color(
+                        left,
+                        right,
+                        cos,
+                        sin
+                    )
+                );
+            }
+        }
+        butterfly.Apply();
+
+        // Find the verctial and horizontal fft kernels and assign the butterfly texture to them
+        int verticalKernel = fftComputeShader.FindKernel("VerticalFFT");
+        int horizontalKernel = fftComputeShader.FindKernel("HorizontalFFT");
+
+        fftComputeShader.SetTexture(verticalKernel, "_Butterfly", butterfly);
+        fftComputeShader.SetTexture(horizontalKernel, "_Butterfly", butterfly);
     }
 
     // The code below is adapted from George Bolba's implemetation of Jerry Tessendorf's Simulating Water paper
@@ -183,6 +236,8 @@ public class FFTGeneration : MonoBehaviour, IWaveGeneration
         initialSpectrum = new Complex[meshResolution, meshResolution];
         conjugateSpectrum = new Complex[meshResolution, meshResolution];
         initialSpectrumTexture = new Texture2D(meshResolution, meshResolution, TextureFormat.RGBAFloat, false);
+        initialSpectrumTexture.filterMode = FilterMode.Point;
+        initialSpectrumTexture.wrapMode = TextureWrapMode.Clamp;
 
         for (int y = 0; y < meshResolution; y++)
         {
@@ -216,8 +271,8 @@ public class FFTGeneration : MonoBehaviour, IWaveGeneration
 
                     initialSpectrum[x, y] =
                         new Complex(
-                            gauss2.x * amplitude,
-                            gauss1.y * amplitude
+                            gauss1.x * amplitude,
+                            gauss2.y * amplitude
                         );
                 }
                 else
@@ -250,6 +305,6 @@ public class FFTGeneration : MonoBehaviour, IWaveGeneration
         }
 
         // Apply the texture
-        initialSpectrumTexture.Apply();
+        initialSpectrumTexture.Apply(false, false);
     }
 }

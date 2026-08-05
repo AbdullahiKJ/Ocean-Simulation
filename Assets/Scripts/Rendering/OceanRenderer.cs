@@ -22,6 +22,14 @@ public class OceanRenderer : MonoBehaviour
     int horizontalFFTKernel;
     int fftMainKernel;
 
+    // Displacement and slope spectrum textures
+    RenderTexture displacementSpectrumA;
+    RenderTexture displacementSpectrumB;
+    RenderTexture slopeSpectrumA;
+    RenderTexture slopeSpectrumB;
+    RenderTexture displacementTexture;
+    RenderTexture slopeTexture;
+
     public void Initialise(Mesh generatedMesh, WaveGenerator activeGenerator, int resolution)
     {
         this.resolution = resolution;
@@ -41,18 +49,20 @@ public class OceanRenderer : MonoBehaviour
         horizontalFFTKernel = fftComputeShader.FindKernel("HorizontalFFT");
         fftMainKernel = fftComputeShader.FindKernel("FFTMain");
 
-        switch (activeGenerator)
-        {
-            case WaveGenerator.Gerstner:
-                UploadGerstnerParameters();
-                break;
-            case WaveGenerator.FFT:
-                UploadFFTParameters();
-                break;
-            // todo: implement hybrid
-            case WaveGenerator.Hybrid:
-                break;
-        }
+        // switch (activeGenerator)
+        // {
+        //     case WaveGenerator.Gerstner:
+        //         UploadGerstnerParameters();
+        //         break;
+        //     case WaveGenerator.FFT:
+        //         UploadFFTParameters();
+        //         break;
+        // todo: implement hybrid
+        //     case WaveGenerator.Hybrid:
+        //         break;
+        // }
+        UploadGerstnerParameters();
+        UploadFFTParameters();
 
         // Assign the active wave generator
         activeWaveGenerator = activeGenerator;
@@ -81,20 +91,44 @@ public class OceanRenderer : MonoBehaviour
     void UploadFFTParameters()
     {
         // Create textures for the displacement and slope spectrums and textures
-        Texture2D displacementSpectrum = new Texture2D(resolution, resolution, TextureFormat.RGBAFloat, false);
-        Texture2D slopeSpectrum = new Texture2D(resolution, resolution, TextureFormat.RGBAFloat, false);
-        Texture2D displacementTexture = new Texture2D(resolution, resolution, TextureFormat.RGBAFloat, false);
-        Texture2D slopeTexture = new Texture2D(resolution, resolution, TextureFormat.RGBAFloat, false);
+        displacementSpectrumA = new RenderTexture(resolution, resolution, 0, RenderTextureFormat.ARGBFloat)
+        {
+            enableRandomWrite = true
+        };
+        displacementSpectrumA.Create();
+        displacementSpectrumB = new RenderTexture(resolution, resolution, 0, RenderTextureFormat.ARGBFloat)
+        {
+            enableRandomWrite = true
+        };
+        displacementSpectrumB.Create();
 
-        fftComputeShader.SetTexture(advanceKernel, "_DisplacementSpectrum", displacementSpectrum);
-        fftComputeShader.SetTexture(verticalFFTKernel, "_DisplacementSpectrum", displacementSpectrum);
-        fftComputeShader.SetTexture(horizontalFFTKernel, "_DisplacementSpectrum", displacementSpectrum);
-        fftComputeShader.SetTexture(fftMainKernel, "_DisplacementSpectrum", displacementSpectrum);
+        slopeSpectrumA = new RenderTexture(resolution, resolution, 0, RenderTextureFormat.ARGBFloat)
+        {
+            enableRandomWrite = true
+        };
+        slopeSpectrumA.Create();
+        slopeSpectrumB = new RenderTexture(resolution, resolution, 0, RenderTextureFormat.ARGBFloat)
+        {
+            enableRandomWrite = true
+        };
+        slopeSpectrumB.Create();
 
-        fftComputeShader.SetTexture(advanceKernel, "_SlopeSpectrum", slopeSpectrum);
-        fftComputeShader.SetTexture(verticalFFTKernel, "_SlopeSpectrum", slopeSpectrum);
-        fftComputeShader.SetTexture(horizontalFFTKernel, "_SlopeSpectrum", slopeSpectrum);
-        fftComputeShader.SetTexture(fftMainKernel, "_SlopeSpectrum", slopeSpectrum);
+        displacementTexture = new RenderTexture(resolution, resolution, 0, RenderTextureFormat.ARGBFloat)
+        {
+            enableRandomWrite = true
+        };
+        displacementTexture.Create();
+        slopeTexture = new RenderTexture(resolution, resolution, 0, RenderTextureFormat.ARGBFloat)
+        {
+            enableRandomWrite = true
+        };
+        slopeTexture.Create();
+
+        fftComputeShader.SetTexture(advanceKernel, "_DisplacementSpectrumInput", displacementSpectrumA);
+        fftComputeShader.SetTexture(advanceKernel, "_SlopeSpectrumInput", slopeSpectrumA);
+
+        fftComputeShader.SetTexture(advanceKernel, "_DisplacementSpectrumOutput", displacementSpectrumA);
+        fftComputeShader.SetTexture(advanceKernel, "_SlopeSpectrumOutput", slopeSpectrumA);
 
         fftComputeShader.SetTexture(fftMainKernel, "_DisplacementTexture", displacementTexture);
         fftComputeShader.SetTexture(fftMainKernel, "_SlopeTexture", slopeTexture);
@@ -115,8 +149,62 @@ public class OceanRenderer : MonoBehaviour
             case WaveGenerator.FFT:
                 threadGroups = resolution / 8;
                 fftComputeShader.Dispatch(advanceKernel, threadGroups, threadGroups, 1);
-                fftComputeShader.Dispatch(verticalFFTKernel, resolution, 1, 1);
-                fftComputeShader.Dispatch(horizontalFFTKernel, resolution, 1, 1);
+
+                RenderTexture read = displacementSpectrumA;
+                RenderTexture write = displacementSpectrumB;
+
+                RenderTexture slopeRead = slopeSpectrumA;
+                RenderTexture slopeWrite = slopeSpectrumB;
+
+                int stages = (int)Mathf.Log(resolution, 2);
+                for (int stage = 0; stage < stages; stage++)
+                {
+                    fftComputeShader.SetTexture(verticalFFTKernel, "_DisplacementSpectrumInput", read);
+                    fftComputeShader.SetTexture(verticalFFTKernel, "_DisplacementSpectrumOutput", write);
+
+                    fftComputeShader.SetTexture(verticalFFTKernel, "_SlopeSpectrumInput", slopeRead);
+                    fftComputeShader.SetTexture(verticalFFTKernel, "_SlopeSpectrumOutput", slopeWrite);
+
+                    fftComputeShader.SetInt("_Stage", stage);
+                    fftComputeShader.Dispatch(verticalFFTKernel, resolution, 1, 1);
+
+                    // swap displacement spectrum
+                    var temp = read;
+                    read = write;
+                    write = temp;
+
+                    // swap slope spectrum
+                    temp = slopeRead;
+                    slopeRead = slopeWrite;
+                    slopeWrite = temp;
+                }
+                for (int stage = 0; stage < stages; stage++)
+                {
+                    fftComputeShader.SetTexture(horizontalFFTKernel, "_DisplacementSpectrumInput", read);
+                    fftComputeShader.SetTexture(horizontalFFTKernel, "_DisplacementSpectrumOutput", write);
+
+                    fftComputeShader.SetTexture(horizontalFFTKernel, "_SlopeSpectrumInput", slopeRead);
+                    fftComputeShader.SetTexture(horizontalFFTKernel, "_SlopeSpectrumOutput", slopeWrite);
+
+                    fftComputeShader.SetInt("_Stage", stage);
+                    fftComputeShader.Dispatch(horizontalFFTKernel, resolution, 1, 1);
+
+                    // swap displacement spectrum
+                    var temp = read;
+                    read = write;
+                    write = temp;
+
+                    // swap slope spectrum
+                    temp = slopeRead;
+                    slopeRead = slopeWrite;
+                    slopeWrite = temp;
+                }
+
+                // Assign the final displacement and slope spectrum read textures to the compute shader for rendering
+                fftComputeShader.SetTexture(fftMainKernel, "_DisplacementSpectrumInput", read);
+                fftComputeShader.SetTexture(fftMainKernel, "_SlopeSpectrumInput", slopeRead);
+
+                // Dispatch the main kernel to compute the final displacement and slope textures
                 fftComputeShader.Dispatch(fftMainKernel, threadGroups, threadGroups, 1);
                 break;
             case WaveGenerator.Hybrid:

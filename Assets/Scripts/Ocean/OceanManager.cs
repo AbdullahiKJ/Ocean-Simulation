@@ -33,18 +33,17 @@ public class OceanManager : MonoBehaviour
         {
             case WaveGenerator.Gerstner:
                 gerstnerGeneration.UpdateGenerator();
-                oceanRenderer.Render();
                 break;
             case WaveGenerator.FFT:
                 fftGeneration.UpdateGenerator();
-                oceanRenderer.Render();
                 break;
             case WaveGenerator.Hybrid:
                 gerstnerGeneration.UpdateGenerator();
                 fftGeneration.UpdateGenerator();
-                oceanRenderer.Render();
                 break;
         }
+
+        oceanRenderer.Render();
 
         // Calculate horizontal displacement
         // Add horizontal displacement to the height map

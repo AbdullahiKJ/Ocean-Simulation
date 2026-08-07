@@ -1,280 +1,328 @@
-// Each #kernel tells which function to compile; you can have many kernels
-#pragma kernel Advance
-#pragma kernel VerticalFFT
-#pragma kernel HorizontalFFT
-#pragma kernel FFTMain
+// Code is adapted from the following sources:
+// George Bolba's implementation of Jerry Tessendorf's Simulating Water paper
+// AceRolla's (Garrett Gunnell) implementation of the Tessendorf paper which refereneces gasgiant's FFT and JONSWAP implementation
 
-// Textures to hold spectrum and slope data
-Texture2D<float4> _InitialSpectrum;
-RWTexture2D<float4> _DisplacementSpectrumInput;
-RWTexture2D<float4> _DisplacementSpectrumOutput;
-RWTexture2D<float4> _SlopeSpectrumInput;
-RWTexture2D<float4> _SlopeSpectrumOutput;
+#pragma kernel CS_InitializeSpectrum
+#pragma kernel CS_PackSpectrumConjugate
+#pragma kernel CS_UpdateSpectrumForFFT
+#pragma kernel CS_HorizontalFFT
+#pragma kernel CS_VerticalFFT
+#pragma kernel CS_AssembleMaps
+#pragma kernel CS_AccumulateFoam
 
-// Displacement and slope textures that will be written to
-RWTexture2D<float4> _DisplacementTexture;
-RWTexture2D<float4> _SlopeTexture;
+#define PI 3.14159265358979323846
 
-// Wave parameters
-float _MeshResolution;
-float _MeshSize;
-float _RepeatTime;
+RWTexture2DArray<float4> _SpectrumTextures, _InitialSpectrumTextures, _DisplacementTextures;
+RWTexture2DArray<float2> _SlopeTextures;
+RWTexture2D<half> _BuoyancyData;
 
-float _Time;
+float _FrameTime, _Gravity, _RepeatTime, _Depth, _LowCutoff, _HighCutoff;
+int _Seed;
+float2 _Lambda;
+uint _N, _LengthScale0, _LengthScale1, _LayerCount;
+// todo: uncomment when working on foam
+// float _FoamBias, _FoamDecayRate, _FoamAdd, _FoamThreshold;
 
-// Constants
-float PI = 3.1415926536f;
-float G = 9.81f;
+float2 ComplexMult(float2 a, float2 b) {
+    return float2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x);
+}
 
-// Shared memory for FFT calculations
-Texture2D<float4> _Butterfly;
-uint _Stage;
-groupshared float4 sharedDisplacement[512];
-groupshared float4 sharedSlope[512];
+float2 EulerFormula(float x) {
+    return float2(cos(x), sin(x));
+}
 
-// The code below is adapted from George Bolba's implemetation of Jerry Tessendorf's Simulating Water paper
-float2 ComplexMult(float2 a, float2 b) { return float2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x); }
+float hash(uint n) {
+    n = (n << 13U) ^ n;
+    n = n * (n * n * 15731U + 0x789221U) + 0x1376312589U;
+    return float(n & uint(0x7fffffffU)) / float(0x7fffffff);
+}
 
-float2 EulerFormula(float x) { return float2(cos(x), sin(x)); }
+float2 UniformToGaussian(float u1, float u2) {
+    float R = sqrt(-2.0f * log(u1));
+    float theta = 2.0f * PI * u2;
 
-// Propagate the waves through time to obtain the displacement spectrum and calculate the slope as well
+    return float2(R * cos(theta), R * sin(theta));
+}
+
+struct SpectrumParameters {
+	float scale;
+	float angle;
+	float spreadBlend;
+	float swell;
+	float alpha;
+	float peakOmega;
+	float gamma;
+	float shortWavesFade;
+};
+
+StructuredBuffer<SpectrumParameters> _Spectrums;
+
+float Dispersion(float kMag) {
+    return sqrt(_Gravity * kMag * tanh(min(kMag * _Depth, 20)));
+}
+
+float DispersionDerivative(float kMag) {
+    float th = tanh(min(kMag * _Depth, 20));
+    float ch = cosh(kMag * _Depth);
+    return _Gravity * (_Depth * kMag / ch / ch + th) / Dispersion(kMag) / 2.0f;
+}
+
+float NormalizationFactor(float s) {
+    float s2 = s * s;
+    float s3 = s2 * s;
+    float s4 = s3 * s;
+    if (s < 5) return -0.000564f * s4 + 0.00776f * s3 - 0.044f * s2 + 0.192f * s + 0.163f;
+    else return -4.80e-08f * s4 + 1.07e-05f * s3 - 9.53e-04f * s2 + 5.90e-02f * s + 3.93e-01f;
+}
+
+float Cosine2s(float theta, float s) {
+	return NormalizationFactor(s) * pow(abs(cos(0.5f * theta)), 2.0f * s);
+}
+
+float SpreadPower(float omega, float peakOmega) {
+	if (omega > peakOmega)
+		return 9.77f * pow(abs(omega / peakOmega), -2.5f);
+	else
+		return 6.97f * pow(abs(omega / peakOmega), 5.0f);
+}
+
+float DirectionSpectrum(float theta, float omega, SpectrumParameters spectrum) {
+	float s = SpreadPower(omega, spectrum.peakOmega) + 16 * tanh(min(omega / spectrum.peakOmega, 20)) * spectrum.swell * spectrum.swell;
+	return lerp(2.0f / 3.1415f * cos(theta) * cos(theta), Cosine2s(theta - spectrum.angle, s), spectrum.spreadBlend);
+}
+
+float TMACorrection(float omega) {
+	float omegaH = omega * sqrt(_Depth / _Gravity);
+	if (omegaH <= 1.0f)
+		return 0.5f * omegaH * omegaH;
+	if (omegaH < 2.0f)
+		return 1.0f - 0.5f * (2.0f - omegaH) * (2.0f - omegaH);
+
+	return 1.0f;
+}
+
+float JONSWAP(float omega, SpectrumParameters spectrum) {
+	float sigma = (omega <= spectrum.peakOmega) ? 0.07f : 0.09f;
+
+	float r = exp(-(omega - spectrum.peakOmega) * (omega - spectrum.peakOmega) / 2.0f / sigma / sigma / spectrum.peakOmega / spectrum.peakOmega);
+	
+	float oneOverOmega = 1.0f / omega;
+	float peakOmegaOverOmega = spectrum.peakOmega / omega;
+	return spectrum.scale * TMACorrection(omega) * spectrum.alpha * _Gravity * _Gravity
+		* oneOverOmega * oneOverOmega * oneOverOmega * oneOverOmega * oneOverOmega
+		* exp(-1.25f * peakOmegaOverOmega * peakOmegaOverOmega * peakOmegaOverOmega * peakOmegaOverOmega)
+		* pow(abs(spectrum.gamma), r);
+}
+
+float ShortWavesFade(float kLength, SpectrumParameters spectrum) {
+	return exp(-spectrum.shortWavesFade * spectrum.shortWavesFade * kLength * kLength);
+}
+
+[numthreads(8,8,1)]
+void CS_InitializeSpectrum(uint3 id : SV_DISPATCHTHREADID) {
+    uint seed = id.x + _N * id.y + _N;
+    seed += _Seed;
+
+    float lengthScales[2] = { _LengthScale0, _LengthScale1 };
+
+    for (uint i = 0; i < _LayerCount; ++i) {
+        float halfN = _N / 2.0f;
+
+        float deltaK = 2.0f * PI / lengthScales[i];
+        float2 K = (id.xy - halfN) * deltaK;
+        float kLength = length(K);
+
+        seed += i + hash(seed) * 10;
+        float4 uniformRandSamples = float4(hash(seed), hash(seed * 2), hash(seed * 3), hash(seed * 4));
+        float2 gauss1 = UniformToGaussian(uniformRandSamples.x, uniformRandSamples.y);
+        float2 gauss2 = UniformToGaussian(uniformRandSamples.z, uniformRandSamples.w);
+
+        if (_LowCutoff <= kLength && kLength <= _HighCutoff) {
+            float kAngle = atan2(K.y, K.x);
+            float omega = Dispersion(kLength);
+
+            float dOmegadk = DispersionDerivative(kLength);
+
+            float spectrum = JONSWAP(omega, _Spectrums[i * 2]) * DirectionSpectrum(kAngle, omega, _Spectrums[i * 2]) * ShortWavesFade(kLength, _Spectrums[i * 2]);
+            
+            if (_Spectrums[i * 2 + 1].scale > 0)
+                spectrum += JONSWAP(omega, _Spectrums[i * 2 + 1]) * DirectionSpectrum(kAngle, omega, _Spectrums[i * 2 + 1]) * ShortWavesFade(kLength, _Spectrums[i * 2 + 1]);
+            
+            _InitialSpectrumTextures[uint3(id.xy, i)] = float4(float2(gauss2.x, gauss1.y) * sqrt(2 * spectrum * abs(dOmegadk) / kLength * deltaK * deltaK), 0.0f, 0.0f);
+        } else {
+            _InitialSpectrumTextures[uint3(id.xy, i)] = 0.0f;
+        }
+    }
+}
+
+[numthreads(8,8,1)]
+void CS_PackSpectrumConjugate(uint3 id : SV_DISPATCHTHREADID) {
+    for (uint i = 0; i < _LayerCount; ++i) {
+        float2 h0 = _InitialSpectrumTextures[uint3(id.xy, i)].rg;
+        float2 h0conj = _InitialSpectrumTextures[uint3((_N - id.x ) % _N, (_N - id.y) % _N, i)].rg;
+
+        _InitialSpectrumTextures[uint3(id.xy, i)] = float4(h0, h0conj.x, -h0conj.y);
+    }
+}
+
 [numthreads(8, 8, 1)]
-void Advance(uint3 id: SV_DispatchThreadID)
-{	
-    uint2 threadID = id.xy;
-	float4 initialSignal = _InitialSpectrum[threadID];
+void CS_UpdateSpectrumForFFT(uint3 id : SV_DISPATCHTHREADID) {
+    float lengthScales[2] = { _LengthScale0, _LengthScale1 };
 
-    // Obtain the initial height field (h0) and its complex conjugate (h0conj) from the initial spectrum
-    float2 h0 = initialSignal.rg;
-    float2 h0conj = initialSignal.ba;
-    
-    float halfN = _MeshResolution / 2.0f;
-    float2 K = (threadID - halfN) * 2.0f * PI / _MeshSize;
-    float kMag = length(K);
-    float kMagRcp = rcp(kMag);
+    for (int i = 0; i < _LayerCount; ++i) {
+        float4 initialSignal = _InitialSpectrumTextures[uint3(id.xy, i)];
+        float2 h0 = initialSignal.xy;
+        float2 h0conj = initialSignal.zw;
 
-    if (kMag < 0.0001f) 
-    {
-        kMagRcp = 1.0f;
-    }
+        float halfN = _N / 2.0f;
+        float2 K = (id.xy - halfN) * 2.0f * PI / lengthScales[i];
+        float kMag = length(K);
+        float kMagRcp = rcp(kMag);
 
-    float w_0 = 2.0f * PI / _RepeatTime;
-    float dispersion = floor(sqrt(G * kMag) / w_0) * w_0 * _Time;
+        if (kMag < 0.0001f) {
+            kMagRcp = 1.0f;
+        }
 
-    float2 exponent = EulerFormula(dispersion);
+        float w_0 = 2.0f * PI / _RepeatTime;
+        float dispersion = floor(sqrt(_Gravity * kMag) / w_0) * w_0 * _FrameTime;
 
-    float2 htilde = ComplexMult(h0, exponent) + ComplexMult(h0conj, float2(exponent.x, -exponent.y));
-    float2 ih = float2(-htilde.y, htilde.x);
+        float2 exponent = EulerFormula(dispersion);
 
-	// Derivatives
-    float2 displacementX = ih * K.x * kMagRcp;
-    float2 displacementY = htilde;
-    float2 displacementZ = ih * K.y * kMagRcp;
-    float2 displacementX_dx = -htilde * K.x * K.x * kMagRcp;
-    float2 displacementY_dx = ih * K.x;
-    float2 displacementZ_dx = -htilde * K.x * K.y * kMagRcp;
-    float2 displacementY_dz = ih * K.y;
-    float2 displacementZ_dz = -htilde * K.y * K.y * kMagRcp;
+        float2 htilde = ComplexMult(h0, exponent) + ComplexMult(h0conj, float2(exponent.x, -exponent.y));
+        float2 ih = float2(-htilde.y, htilde.x);
 
-    float2 htildeDisplacementX = float2(displacementX.x - displacementZ.y, displacementX.y + displacementZ.x);
-    float2 htildeDisplacementZ = float2(displacementY.x - displacementZ_dx.y, displacementY.y + displacementZ_dx.x);
+        float2 displacementX = ih * K.x * kMagRcp;
+        float2 displacementY = htilde;
+        float2 displacementZ = ih * K.y * kMagRcp;
+
+        float2 displacementX_dx = -htilde * K.x * K.x * kMagRcp;
+        float2 displacementY_dx = ih * K.x;
+        float2 displacementZ_dx = -htilde * K.x * K.y * kMagRcp;
+
+        float2 displacementY_dz = ih * K.y;
+        float2 displacementZ_dz = -htilde * K.y * K.y * kMagRcp;
+
+        float2 htildeDisplacementX = float2(displacementX.x - displacementZ.y, displacementX.y + displacementZ.x);
+        float2 htildeDisplacementZ = float2(displacementY.x - displacementZ_dx.y, displacementY.y + displacementZ_dx.x);
         
-    float2 htildeSlopeX = float2(displacementY_dx.x - displacementY_dz.y, displacementY_dx.y + displacementY_dz.x);
-    float2 htildeSlopeZ = float2(displacementX_dx.x - displacementZ_dz.y, displacementX_dx.y + displacementZ_dz.x);
+        float2 htildeSlopeX = float2(displacementY_dx.x - displacementY_dz.y, displacementY_dx.y + displacementY_dz.x);
+        float2 htildeSlopeZ = float2(displacementX_dx.x - displacementZ_dz.y, displacementX_dx.y + displacementZ_dz.x);
 
-    // Store the displacement sepctrum and slope spectrums in textures
-    _DisplacementSpectrumInput[threadID] = float4(htildeDisplacementX, htildeDisplacementZ);
-    _SlopeSpectrumInput[threadID] = float4(htildeSlopeX, htildeSlopeZ);
+        _SpectrumTextures[uint3(id.xy, i * 2)] = float4(htildeDisplacementX, htildeDisplacementZ);
+        _SpectrumTextures[uint3(id.xy, i * 2 + 1)] = float4(htildeSlopeX, htildeSlopeZ);
+    }
 }
 
-// Perform the inverse FFT to convert the vertical displacement and slope spectrums into the time domain
-[numthreads(512, 1, 1)]
-void VerticalFFT(
-        uint3 id : SV_DispatchThreadID,
-        uint3 groupID : SV_GroupID,
-        uint3 groupThreadID : SV_GroupThreadID
-    )
-{
-    uint column = groupID.x;
-    uint row = groupThreadID.x;
+// todo: maybe change this to a parameter passed from the fft generation script
+#define SIZE 512
+#define LOG_SIZE 9
 
-    // Load one column into shared memory
-    sharedDisplacement[row] = _DisplacementSpectrumInput[uint2(column,row)];
-    sharedSlope[row] = _SlopeSpectrumInput[uint2(column,row)];
+RWTexture2DArray<float4> _FourierTarget;
+bool _Direction;
 
-    GroupMemoryBarrierWithGroupSync();
+groupshared float4 fftGroupBuffer[2][SIZE];
 
-    // Butterfly calculations
-    float4 lookup = _Butterfly[uint2(row,_Stage)];
+void ButterflyValues(uint step, uint index, out uint2 indices, out float2 twiddle) {
+    const float twoPi = 6.28318530718;
+    uint b = SIZE >> (step + 1);
+    uint w = b * (index / b);
+    uint i = (w + index) % SIZE;
+    sincos(-twoPi / SIZE * w, twiddle.y, twiddle.x);
 
-    uint left = (uint)(lookup.r * (_MeshResolution - 1));
-    uint right = (uint)(lookup.g * (_MeshResolution - 1));
-
-    float2 W = lookup.ba;
-
-    float4 ADisp = sharedDisplacement[left];
-    float4 BDisp = sharedDisplacement[right];
-
-    float4 ASlope = sharedSlope[left];
-    float4 BSlope = sharedSlope[right];
-
-    // Get x and z components of displacement and slope
-    float2 AxDisp = ADisp.rg;
-    float2 AzDisp = ADisp.ba;
-
-    float2 BxDisp = BDisp.rg;
-    float2 BzDisp = BDisp.ba;
-
-    float2 AxSlope = ASlope.rg;
-    float2 AzSlope = ASlope.ba;
-
-    float2 BxSlope = BSlope.rg;
-    float2 BzSlope = BSlope.ba;
-
-    // Compute Tx and Tz for displacement and slope
-    float2 TxDisp = ComplexMult(BxDisp,W);
-    float2 TzDisp = ComplexMult(BzDisp,W);
-
-    float2 TxSlope = ComplexMult(BxSlope,W);
-    float2 TzSlope = ComplexMult(BzSlope,W);
-
-    // Compute the new A values for displacement and slope
-    float2 newAxDisp = AxDisp + TxDisp;
-    float2 newBxDisp = AxDisp - TxDisp;
-
-    float2 newAzDisp = AzDisp + TzDisp;
-    float2 newBzDisp = AzDisp - TzDisp;
-
-    float2 newAxSlope = AxSlope + TxSlope;
-    float2 newBxSlope = AxSlope - TxSlope;
-
-    float2 newAzSlope = AzSlope + TzSlope;
-    float2 newBzSlope = AzSlope - TzSlope;
-
-    // Store the new values back into shared memory
-    if(row == left)
-    {
-        sharedDisplacement[row] = float4(newAxDisp,newAzDisp);
-        sharedSlope[row] = float4(newAxSlope,newAzSlope);
-    }
-    else
-    {
-        sharedDisplacement[row] = float4(newBxDisp,newBzDisp);
-        sharedSlope[row] = float4(newBxSlope,newBzSlope);
-    }
-    GroupMemoryBarrierWithGroupSync();
-
-    _DisplacementSpectrumOutput[uint2(column,row)] = sharedDisplacement[row];
-    _SlopeSpectrumOutput[uint2(column,row)] = sharedSlope[row];
+    //This is what makes it the inverse FFT
+    twiddle.y = -twiddle.y;
+    indices = uint2(i, i + b);
 }
 
-// Perform the inverse FFT to convert the horizontal displacement and slope spectrums into the time domain
-[numthreads(512, 1, 1)]
-void HorizontalFFT(
-        uint3 id : SV_DispatchThreadID,
-        uint3 groupID : SV_GroupID,
-        uint3 groupThreadID : SV_GroupThreadID
-)
-{
-    uint row = groupID.x;
-    uint column = groupThreadID.x;
-
-    // Load one row into shared memory
-    sharedDisplacement[column] = _DisplacementSpectrumInput[uint2(column,row)];
-    sharedSlope[column] = _SlopeSpectrumInput[uint2(column,row)];
-
+float4 FFT(uint threadIndex, float4 input) {
+    fftGroupBuffer[0][threadIndex] = input;
     GroupMemoryBarrierWithGroupSync();
+    bool flag = false;
 
-    // Butterfly calculations
-    float4 lookup = _Butterfly[uint2(column,_Stage)];
+    [unroll]
+    for (uint step = 0; step < LOG_SIZE; ++step) {
+        uint2 inputsIndices;
+        float2 twiddle;
+        ButterflyValues(step, threadIndex, inputsIndices, twiddle);
 
-    uint left = (uint)(lookup.r * (_MeshResolution - 1));
-    uint right = (uint)(lookup.g * (_MeshResolution - 1));
+        float4 v = fftGroupBuffer[flag][inputsIndices.y];
+        fftGroupBuffer[!flag][threadIndex] = fftGroupBuffer[flag][inputsIndices.x] + float4(ComplexMult(twiddle, v.xy), ComplexMult(twiddle, v.zw));
 
-    float2 W = lookup.ba;
-
-    float4 ADisp = sharedDisplacement[left];
-    float4 BDisp = sharedDisplacement[right];
-
-    float4 ASlope = sharedSlope[left];
-    float4 BSlope = sharedSlope[right];
-
-    // Get x and z components of displacement and slope
-    float2 AxDisp = ADisp.rg;
-    float2 AzDisp = ADisp.ba;
-
-    float2 BxDisp = BDisp.rg;
-    float2 BzDisp = BDisp.ba;
-
-    float2 AxSlope = ASlope.rg;
-    float2 AzSlope = ASlope.ba;
-
-    float2 BxSlope = BSlope.rg;
-    float2 BzSlope = BSlope.ba;
-
-    // Compute Tx and Tz for displacement and slope
-    float2 TxDisp = ComplexMult(BxDisp,W);
-    float2 TzDisp = ComplexMult(BzDisp,W);
-
-    float2 TxSlope = ComplexMult(BxSlope,W);
-    float2 TzSlope = ComplexMult(BzSlope,W);
-
-    // Compute the new A values for displacement and slope
-    float2 newAxDisp = AxDisp + TxDisp;
-    float2 newBxDisp = AxDisp - TxDisp;
-
-    float2 newAzDisp = AzDisp + TzDisp;
-    float2 newBzDisp = AzDisp - TzDisp;
-
-    float2 newAxSlope = AxSlope + TxSlope;
-    float2 newBxSlope = AxSlope - TxSlope;
-
-    float2 newAzSlope = AzSlope + TzSlope;
-    float2 newBzSlope = AzSlope - TzSlope;
-
-    // Store the new values back into shared memory
-    if(column == left)
-    {
-        sharedDisplacement[column] = float4(newAxDisp,newAzDisp);
-        sharedSlope[column] = float4(newAxSlope,newAzSlope);
+        flag = !flag;
+        GroupMemoryBarrierWithGroupSync();
     }
-    else
-    {
-        sharedDisplacement[column] = float4(newBxDisp,newBzDisp);
-        sharedSlope[column] = float4(newBxSlope,newBzSlope);
-    }
-    GroupMemoryBarrierWithGroupSync();
-  
-    _DisplacementSpectrumOutput[uint2(column,row)] = sharedDisplacement[column];
-    _SlopeSpectrumOutput[uint2(column,row)] = sharedSlope[column];
+
+    return fftGroupBuffer[flag][threadIndex];
 }
 
-float4 Permute(float4 data, uint3 id) 
-{
+[numthreads(SIZE, 1, 1)]
+void CS_HorizontalFFT(uint3 id : SV_DISPATCHTHREADID) {
+    for (int i = 0; i < 8; ++i) {
+        _FourierTarget[uint3(id.xy, i)] = FFT(id.x, _FourierTarget[uint3(id.xy, i)]);
+    }
+}
+
+[numthreads(SIZE, 1, 1)]
+void CS_VerticalFFT(uint3 id : SV_DISPATCHTHREADID) {
+    for (int i = 0; i < 8; ++i) {
+        _FourierTarget[uint3(id.yx, i)] = FFT(id.x, _FourierTarget[uint3(id.yx, i)]);
+    }
+}
+
+float4 Permute(float4 data, float3 id) {
     return data * (1.0f - 2.0f * ((id.x + id.y) % 2));
 }
 
-// Apply a checkerboard pattern transformation to the spectrums and generate the final displacement and slope maps
 [numthreads(8, 8, 1)]
-void FFTMain(uint3 id: SV_DispatchThreadID)
-{    
-    uint2 threadID = id.xy;
-    const float2 Lambda = float2(1.0f, 1.0f);
+void CS_AssembleMaps(uint3 id : SV_DISPATCHTHREADID) {
+    for (int i = 0; i < _LayerCount; ++i) {
+        float4 htildeDisplacement = Permute(_SpectrumTextures[uint3(id.xy, i * 2)], id);
+        float4 htildeSlope = Permute(_SpectrumTextures[uint3(id.xy, i * 2 + 1)], id);
 
-	float4 htildeDisplacement = Permute(_DisplacementSpectrumInput[threadID], id);
-	float4 htildeSlope = Permute(_SlopeSpectrumInput[threadID], id);
-	
-	float2 dxdz = htildeDisplacement.rg;
-	float2 dydxz = htildeDisplacement.ba;
-	float2 dyxdyz = htildeSlope.rg;
-	float2 dxxdzz = htildeSlope.ba;
-	
-    // float normalization = 1.0f / (_MeshResolution * _MeshResolution);
-    float normalization = 1.0f;
+        float2 dxdz = htildeDisplacement.rg;
+        float2 dydxz = htildeDisplacement.ba;
+        float2 dyxdyz = htildeSlope.rg;
+        float2 dxxdzz = htildeSlope.ba;
+        
+        float jacobian = (1.0f + _Lambda.x * dxxdzz.x) * (1.0f + _Lambda.y * dxxdzz.y) - _Lambda.x * _Lambda.y * dydxz.y * dydxz.y;
 
-	float3 displacement = float3(Lambda.x * dxdz.x, dydxz.x, Lambda.y * dxdz.y) * normalization;
-	float2 slopes = dyxdyz.xy / (1 + abs(dxxdzz * Lambda)) * normalization;
-	
-	_DisplacementTexture[threadID] = float4(displacement, 1.0f);
-	_SlopeTexture[threadID] = float4(slopes, 0.0f, 1.0f);
+        float3 displacement = float3(_Lambda.x * dxdz.x, dydxz.x, _Lambda.y * dxdz.y);
+
+        float2 slopes = dyxdyz.xy / (1 + abs(dxxdzz * _Lambda));
+        float covariance = slopes.x * slopes.y;
+
+        // todo: uncomment when working on foam
+        float foam = 0.0f;
+        // float foam = _DisplacementTextures[uint3(id.xy, i)].a;
+        // foam *= exp(-_FoamDecayRate);
+        // foam = saturate(foam);
+
+        // float biasedJacobian = max(0.0f, -(jacobian - _FoamBias));
+
+        // if (biasedJacobian > _FoamThreshold)
+            // foam += _FoamAdd * biasedJacobian;
+
+        _DisplacementTextures[uint3(id.xy, i)] = float4(displacement, foam);
+        _SlopeTextures[uint3(id.xy, i)] = float2(slopes);
+
+        // todo: uncomment later
+        // if (i == 0) {
+        //     _BuoyancyData[id.xy] = displacement.y;
+        // }
+    }
+}
+
+
+float gaussian(int x, int y) {
+    float _Spread = 0.5f;
+    float sigmaSqu = _Spread * _Spread;
+    return (1 / sqrt(2 * PI * sigmaSqu)) * exp(-((x * x) + (y * y)) / (2 * sigmaSqu));
+}
+
+// todo: implement foam accumulation
+SamplerState linear_repeat_sampler;
+
+[numthreads(8, 8, 1)]
+void CS_AccumulateFoam(uint3 id : SV_DISPATCHTHREADID) {
+    _SpectrumTextures[uint3(id.xy, 1)] = 0;
 }

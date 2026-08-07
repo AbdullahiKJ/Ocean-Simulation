@@ -1,310 +1,251 @@
 using UnityEngine;
 using System;
-using System.Numerics;
+
+// Code is adapted from the following sources
+// George Bolba's implementation of Jerry Tessendorf's Simulating Water paper
+// AceRolla's (Garrett Gunnell) implementation of the Tessendorf paper which refereneces gasgiant's FFT and JONSWAP implementation
 
 public class FFTGeneration : MonoBehaviour, IWaveGeneration
 {
     [SerializeField] ComputeShader fftComputeShader;
-    float simulationTime = 0.0f;
-    float GRAVITY = 9.81f;
-    float PI = 3.14159265359f;
-    Complex[,] initialSpectrum;
-    Complex[,] conjugateSpectrum;
-    Texture2D initialSpectrumTexture;
-    int resolution;
+    [SerializeField] Material oceanMaterial;
+
+    // Wave generation Spectrum settings
+    public struct SpectrumSettings
+    {
+        public float scale;
+        public float angle;
+        public float spreadBlend;
+        public float swell;
+        public float alpha;
+        public float peakOmega;
+        public float gamma;
+        public float shortWavesFade;
+    }
+
+    SpectrumSettings[] spectrums = new SpectrumSettings[4];
+
+    [System.Serializable]
+    public struct DisplaySpectrumSettings
+    {
+        [Range(0, 5)]
+        [Tooltip("Scale of the spectrum. Higher values result in larger waves.")]
+        public float scale;
+        [Range(0.01f, 10000.0f)]
+        [Tooltip("Wind speed affects the growth of waves, higher wind speeds produce larger waves.")]
+        public float windSpeed;
+        [Range(0.0f, 360.0f)]
+        [Tooltip("Direction from which the wind is blowing.")]
+        public float windDirection;
+        [Tooltip("Fetch is the distance over water that the wind blows in a single direction. Longer fetches allow for larger waves to develop.")]
+        public float fetch;
+        [Range(0, 1)]
+        [Tooltip("Dictates how directional the waves are relative to the wind direction"
+        + "Lower values produce more chaotic wave patterns, while higher values produce waves that align with the wind direction")]
+        public float spreadBlend;
+        [Range(0, 1)]
+        [Tooltip("Controls hwo much energy is focused in the dominant direction."
+        + "Lower values produce more chaotic wave patterns, while higher values produce more parallel wave patterns")]
+        public float swell;
+        [Tooltip("Controls the sharpness of the peak in the wave spectrum. Higher values result in a more pronounced peak, leading to larger waves.")]
+        public float peakEnhancement;
+        [Tooltip("Controls shorwavelegth waves. Higher values remove choppiness and sharp peaks. Low vvalues produce rough surfaces with smaller waves.")]
+        public float shortWavesFade;
+    }
+
+    [Header("Spectrum Settings")]
+    [Range(0, 100000)]
+    public int seed = 0;
+
+    [Range(0.0f, 0.1f)]
+    public float lowCutoff = 0.0001f;
+
+    [Range(0.1f, 9000.0f)]
+    public float highCutoff = 9000.0f;
+
+    [Range(0.01f, 20.0f)]
+    public float gravity = 9.81f;
+
+    [Range(2.0f, 20.0f)]
+    public float depth = 20.0f;
+
+    [Range(0.0f, 200.0f)]
+    public float repeatTime = 200.0f;
+
+    [Range(0.0f, 5.0f)]
+    public float speed = 1.0f;
+
+    public Vector2 lambda = new Vector2(1.0f, 1.0f);
+
+    [Range(0.0f, 10.0f)]
+    public float displacementDepthFalloff = 1.0f;
+    public int layerCount = 2;
+
+    [Header("Layer One")]
+    [Range(0, 2048)]
+    public int lengthScale1 = 256;
+    [SerializeField] DisplaySpectrumSettings spectrum1;
+    [SerializeField] DisplaySpectrumSettings spectrum2;
+
+    [Header("Layer Two")]
+    [Range(0, 2048)]
+    public int lengthScale2 = 256;
+    [SerializeField] DisplaySpectrumSettings spectrum3;
+    [SerializeField] DisplaySpectrumSettings spectrum4;
+
+    // Textures
+    RenderTexture displacementTextures,
+                slopeTextures,
+                initialSpectrumTextures,
+                spectrumTextures;
+
+    private ComputeBuffer spectrumBuffer;
+
+    // Mesh Configuration
+    int resolution, logN, threadGroupsX, threadGroupsY;
     float size;
-
-    // Wave generation configuration
-    [SerializeField] float lowCutoff = 0.0f;
-    [SerializeField] float highCutoff = 0.0f;
-    [SerializeField] float depth = 0.0f;
-    [SerializeField][Range(1.0f, 5.0f)] float scale; // Used to scale the Spectrum [1.0f, 5.0f] --> Value Range
-    [SerializeField][Range(0.0f, 1.0f)] float spreadBlend; // Used to blend between agitated water motion, and windDirection [0.0f, 1.0f]
-    [SerializeField][Range(0.0f, 1.0f)] float swell; // Influences wave choppines, the bigger the swell, the longer the wave length [0.0f, 1.0f]
-    [SerializeField][Range(0.0f, 7.0f)] float gamma; // Defines the Spectrum Peak [0.0f, 7.0f]
-    [SerializeField][Range(0.0f, 1.0f)] float shortWavesFade; // [0.0f, 1.0f]
-    [SerializeField][Range(0.0f, 360.0f)] float windDirection; // [0.0f, 360.0f]
-    [SerializeField][Range(0.0f, 10000.0f)] float fetch; // Distance over which Wind impacts Wave Formation [0.0f, 10000.0f]
-    [SerializeField][Range(0.0f, 100.0f)] float windSpeed; // [0.0f, 100.0f]
-    [SerializeField][Range(0.0f, 200.0f)] float repeatTime; // [0.0f, 200.0f]
-    float angle;
-    float alpha;
-    float peakOmega;
-
-    struct JonSwapParameters
-    {
-        float scale; // Used to scale the Spectrum [1.0f, 5.0f] --> Value Range
-        float spreadBlend; // Used to blend between agitated water motion, and windDirection [0.0f, 1.0f]
-        float swell; // Influences wave choppines, the bigger the swell, the longer the wave length [0.0f, 1.0f]
-        float gamma; // Defines the Spectrum Peak [0.0f, 7.0f]
-        float shortWavesFade; // [0.0f, 1.0f]
-
-        float windDirection; // [0.0f, 360.0f]
-        float fetch; // Distance over which Wind impacts Wave Formation [0.0f, 10000.0f]
-        float windSpeed; // [0.0f, 100.0f]
-        float repeatTime; // determines how quick the waves will animate, in relation to their displacement. [0.0f, 200.0f]
-        float angle;
-        float alpha;
-        float peakOmega;
-    }
-
-    public void Initialise(int meshResolution, float meshSize)
-    {
-        resolution = meshResolution;
-        size = meshSize;
-        GenerateSpectrum(meshResolution, meshSize);
-        GenerateLookUpTexture();
-        UploadToShader();
-    }
 
     public float SampleHeight()
     {
         throw new System.NotImplementedException();
     }
 
-    public UnityEngine.Vector3 SampleNormal()
+    public Vector3 SampleNormal()
     {
         throw new System.NotImplementedException();
     }
 
+    void SetFFTUniforms()
+    {
+        fftComputeShader.SetInt("_LayerCount", layerCount);
+        fftComputeShader.SetVector("_Lambda", lambda);
+        fftComputeShader.SetFloat("_FrameTime", Time.time * speed);
+        fftComputeShader.SetFloat("_Gravity", gravity);
+        fftComputeShader.SetFloat("_RepeatTime", repeatTime);
+        fftComputeShader.SetInt("_N", resolution);
+        fftComputeShader.SetInt("_Seed", seed);
+        fftComputeShader.SetInt("_LengthScale0", lengthScale1);
+        fftComputeShader.SetInt("_LengthScale1", lengthScale2);
+        // fftComputeShader.SetFloat("_NormalStrength", normalStrength);
+        // fftComputeShader.SetFloat("_FoamThreshold", foamThreshold);
+        fftComputeShader.SetFloat("_Depth", depth);
+        fftComputeShader.SetFloat("_LowCutoff", lowCutoff);
+        fftComputeShader.SetFloat("_HighCutoff", highCutoff);
+        // fftComputeShader.SetFloat("_FoamBias", foamBias);
+        // fftComputeShader.SetFloat("_FoamDecayRate", foamDecayRate);
+        // fftComputeShader.SetFloat("_FoamThreshold", foamThreshold);
+        // fftComputeShader.SetFloat("_FoamAdd", foamAdd);
+    }
+
+    float JonswapAlpha(float fetch, float windSpeed)
+    {
+        return 0.076f * Mathf.Pow(gravity * fetch / windSpeed / windSpeed, -0.22f);
+    }
+
+    float JonswapPeakFrequency(float fetch, float windSpeed)
+    {
+        return 22 * Mathf.Pow(windSpeed * fetch / gravity / gravity, -0.33f);
+    }
+
+    void FillSpectrumStruct(DisplaySpectrumSettings displaySettings, ref SpectrumSettings computeSettings)
+    {
+        computeSettings.scale = displaySettings.scale;
+        computeSettings.angle = displaySettings.windDirection / 180 * Mathf.PI;
+        computeSettings.spreadBlend = displaySettings.spreadBlend;
+        computeSettings.swell = Mathf.Clamp(displaySettings.swell, 0.01f, 1);
+        computeSettings.alpha = JonswapAlpha(displaySettings.fetch, displaySettings.windSpeed);
+        computeSettings.peakOmega = JonswapPeakFrequency(displaySettings.fetch, displaySettings.windSpeed);
+        computeSettings.gamma = displaySettings.peakEnhancement;
+        computeSettings.shortWavesFade = displaySettings.shortWavesFade;
+    }
+
+    void SetSpectrumBuffers()
+    {
+        FillSpectrumStruct(spectrum1, ref spectrums[0]);
+        FillSpectrumStruct(spectrum2, ref spectrums[1]);
+        FillSpectrumStruct(spectrum3, ref spectrums[2]);
+        FillSpectrumStruct(spectrum4, ref spectrums[3]);
+
+        spectrumBuffer.SetData(spectrums);
+        fftComputeShader.SetBuffer(0, "_Spectrums", spectrumBuffer);
+    }
+
+    void InverseFFT(RenderTexture spectrumTextures)
+    {
+        fftComputeShader.SetTexture(3, "_FourierTarget", spectrumTextures);
+        fftComputeShader.Dispatch(3, 1, resolution, 1);
+        fftComputeShader.SetTexture(4, "_FourierTarget", spectrumTextures);
+        fftComputeShader.Dispatch(4, 1, resolution, 1);
+    }
+
+    public void Initialise(int meshResolution, float meshSize)
+    {
+        resolution = meshResolution;
+        size = meshSize;
+
+        logN = (int)Mathf.Log(resolution, 2.0f);
+        threadGroupsX = Mathf.CeilToInt(resolution / 8.0f);
+        threadGroupsY = Mathf.CeilToInt(resolution / 8.0f);
+
+        // Create the render textures for the initial spectrum, displacement, slope, and spectrum data
+        initialSpectrumTextures = Util.CreateRenderTex(resolution, resolution, 4, RenderTextureFormat.ARGBHalf, true);
+        displacementTextures = Util.CreateRenderTex(resolution, resolution, 4, RenderTextureFormat.ARGBHalf, true);
+        slopeTextures = Util.CreateRenderTex(resolution, resolution, 4, RenderTextureFormat.RGHalf, true);
+        spectrumTextures = Util.CreateRenderTex(resolution, resolution, 8, RenderTextureFormat.ARGBHalf, true);
+
+        // Create a compute buffer to hold the spectrum data
+        spectrumBuffer = new ComputeBuffer(4, 8 * sizeof(float));
+
+        SetFFTUniforms();
+        SetSpectrumBuffers();
+
+        // Compute initial JONSWAP spectrum
+        fftComputeShader.SetTexture(0, "_InitialSpectrumTextures", initialSpectrumTextures);
+        fftComputeShader.Dispatch(0, threadGroupsX, threadGroupsY, 1);
+        fftComputeShader.SetTexture(1, "_InitialSpectrumTextures", initialSpectrumTextures);
+        fftComputeShader.Dispatch(1, threadGroupsX, threadGroupsY, 1);
+
+        // todo: remove later
+        UploadToShader();
+    }
+
     public void UpdateGenerator()
     {
-        simulationTime += Time.deltaTime;
-        fftComputeShader.SetFloat("_Time", simulationTime);
+        SetFFTUniforms();
+
+        // Progress Spectrum For FFT
+        fftComputeShader.SetTexture(2, "_InitialSpectrumTextures", initialSpectrumTextures);
+        fftComputeShader.SetTexture(2, "_SpectrumTextures", spectrumTextures);
+        fftComputeShader.Dispatch(2, threadGroupsX, threadGroupsY, 1);
+
+        // Compute FFT For Height
+        InverseFFT(spectrumTextures);
+
+        // Assemble maps
+        fftComputeShader.SetTexture(5, "_DisplacementTextures", displacementTextures);
+        fftComputeShader.SetTexture(5, "_SpectrumTextures", spectrumTextures);
+        fftComputeShader.SetTexture(5, "_SlopeTextures", slopeTextures);
+        // fftComputeShader.SetTexture(5, "_BuoyancyData", buoyancyDataTex);
+        fftComputeShader.Dispatch(5, threadGroupsX, threadGroupsY, 1);
+
+        displacementTextures.GenerateMips();
+        slopeTextures.GenerateMips();
+
+        oceanMaterial.SetTexture("_DisplacementTextures", displacementTextures);
+        oceanMaterial.SetTexture("_SlopeTextures", slopeTextures);
     }
 
     // Upload the spectrum data to the compute shader for rendering
     public void UploadToShader()
     {
         // Find the advance kernel
-        int advanceKernel = fftComputeShader.FindKernel("Advance");
+        // int advanceKernel = fftComputeShader.FindKernel("Advance");
 
         // Assign textures and floats to the compute shader
-        fftComputeShader.SetTexture(advanceKernel, "_InitialSpectrum", initialSpectrumTexture);
+        // fftComputeShader.SetTexture(advanceKernel, "_InitialSpectrum", initialSpectrumTexture);
 
-        fftComputeShader.SetFloat("_MeshResolution", resolution);
-        fftComputeShader.SetFloat("_MeshSize", size);
-        fftComputeShader.SetFloat("_RepeatTime", repeatTime);
-    }
-
-    void GenerateLookUpTexture()
-    {
-        int stages = (int)Mathf.Log(resolution, 2);
-
-        Texture2D butterfly = new Texture2D(resolution, stages, TextureFormat.RGBAFloat, false);
-
-        for (int stage = 0; stage < stages; stage++)
-        {
-            int step = 1 << (stage + 1);
-
-            int halfStep = step >> 1;
-
-            for (int i = 0; i < resolution; i++)
-            {
-                int group = i / step;
-                int offset = i % step;
-
-                int even = group * step + offset % halfStep;
-                int odd = even + halfStep;
-
-                float angle = -2f * Mathf.PI * (offset % halfStep) / step;
-                float cos = Mathf.Cos(angle);
-                float sin = Mathf.Sin(angle);
-
-                float left = even / (float)(resolution - 1);
-                float right = odd / (float)(resolution - 1);
-
-                butterfly.SetPixel(
-                    i,
-                    stage,
-                    new Color(
-                        left,
-                        right,
-                        cos,
-                        sin
-                    )
-                );
-            }
-        }
-        butterfly.Apply();
-
-        // Find the verctial and horizontal fft kernels and assign the butterfly texture to them
-        int verticalKernel = fftComputeShader.FindKernel("VerticalFFT");
-        int horizontalKernel = fftComputeShader.FindKernel("HorizontalFFT");
-
-        fftComputeShader.SetTexture(verticalKernel, "_Butterfly", butterfly);
-        fftComputeShader.SetTexture(horizontalKernel, "_Butterfly", butterfly);
-    }
-
-    // The code below is adapted from George Bolba's implemetation of Jerry Tessendorf's Simulating Water paper
-    float DispersionRelation(float kMag)
-    {
-        return Mathf.Sqrt(GRAVITY * kMag * (float)Math.Tanh(Mathf.Min(kMag * depth, 20)));
-    }
-
-    float DispersionDerivative(float kMag)
-    {
-        float th = (float)Math.Tanh(Mathf.Min(kMag * depth, 20));
-        float ch = (float)Math.Cosh(kMag * depth);
-        return GRAVITY * (depth * kMag / ch / ch + th) / DispersionRelation(kMag) / 2.0f;
-    }
-
-    float NormalizationFactor(float s)
-    {
-        float s2 = s * s;
-        float s3 = s2 * s;
-        float s4 = s3 * s;
-        if (s < 5) return -0.000564f * s4 + 0.00776f * s3 - 0.044f * s2 + 0.192f * s + 0.163f;
-        else return -4.80e-08f * s4 + 1.07e-05f * s3 - 9.53e-04f * s2 + 5.90e-02f * s + 3.93e-01f;
-    }
-
-    float Cosine2s(float theta, float s)
-    {
-        return NormalizationFactor(s) * Mathf.Pow(Mathf.Abs(Mathf.Cos(0.5f * theta)), 2.0f * s);
-    }
-
-    float SpreadPower(float omega, float peakOmega)
-    {
-        if (omega > peakOmega)
-            return 9.77f * Mathf.Pow(Mathf.Abs(omega / peakOmega), -2.5f);
-        else
-            return 6.97f * Mathf.Pow(Mathf.Abs(omega / peakOmega), 5.0f);
-    }
-
-    float DirectionSpectrum(float theta, float omega)
-    {
-        float s = SpreadPower(omega, peakOmega) + 16 * (float)Math.Tanh(Mathf.Min(omega / peakOmega, 20)) * swell * swell;
-
-        return Mathf.Lerp(2.0f / 3.1415f * Mathf.Cos(theta) * Mathf.Cos(theta), Cosine2s(theta - angle, s), spreadBlend);
-    }
-
-    float TMACorrection(float omega)
-    {
-        float omegaH = omega * Mathf.Sqrt(depth / GRAVITY);
-        if (omegaH <= 1.0f)
-            return 0.5f * omegaH * omegaH;
-        if (omegaH < 2.0f)
-            return 1.0f - 0.5f * (2.0f - omegaH) * (2.0f - omegaH);
-
-        return 1.0f;
-    }
-
-    float JONSWAP(float omega)
-    {
-        angle = windDirection / 180.0f * Mathf.PI;
-        alpha = 0.076f * Mathf.Pow(GRAVITY * fetch / windSpeed / windSpeed, -0.22f);
-        peakOmega = 22 * Mathf.Pow(windSpeed * fetch / 9.81f / 9.81f, -0.33f);
-
-        float sigma = (omega <= peakOmega) ? 0.07f : 0.09f;
-
-        float r = Mathf.Exp(-(omega - peakOmega) * (omega - peakOmega) / 2.0f / sigma / sigma / peakOmega / peakOmega);
-
-        float oneOverOmega = 1.0f / (omega + 1e-6f);
-        float peakOmegaOverOmega = peakOmega / omega;
-        return scale * TMACorrection(omega) * alpha * GRAVITY * GRAVITY
-            * oneOverOmega * oneOverOmega * oneOverOmega * oneOverOmega * oneOverOmega
-            * Mathf.Exp(-1.25f * peakOmegaOverOmega * peakOmegaOverOmega * peakOmegaOverOmega * peakOmegaOverOmega)
-            * Mathf.Pow(Mathf.Abs(gamma), r);
-
-    }
-
-    float ShortWavesFade(float kLength)
-    {
-        return Mathf.Exp(-shortWavesFade * shortWavesFade * kLength * kLength);
-    }
-
-    UnityEngine.Vector2 GaussianRandom()
-    {
-        float u1 = UnityEngine.Random.value;
-        float u2 = UnityEngine.Random.value;
-
-        float r = Mathf.Sqrt(-2.0f * Mathf.Log(u1));
-        float theta = 2.0f * Mathf.PI * u2;
-
-        return new UnityEngine.Vector2(
-            r * Mathf.Cos(theta),
-            r * Mathf.Sin(theta)
-        );
-    }
-
-    void GenerateSpectrum(int meshResolution, float meshSize)
-    {
-        float halfN = meshResolution / 2.0f;
-
-        float deltaK = 2.0f * PI / meshSize;
-
-        initialSpectrum = new Complex[meshResolution, meshResolution];
-        conjugateSpectrum = new Complex[meshResolution, meshResolution];
-        initialSpectrumTexture = new Texture2D(meshResolution, meshResolution, TextureFormat.RGBAFloat, false);
-        initialSpectrumTexture.filterMode = FilterMode.Point;
-        initialSpectrumTexture.wrapMode = TextureWrapMode.Clamp;
-
-        for (int y = 0; y < meshResolution; y++)
-        {
-            for (int x = 0; x < meshResolution; x++)
-            {
-                UnityEngine.Vector2 K = new UnityEngine.Vector2(
-                    (x - halfN) * deltaK,
-                    (y - halfN) * deltaK
-                );
-
-                float kLength = K.magnitude;
-
-                if (lowCutoff <= kLength && kLength <= highCutoff)
-                {
-                    UnityEngine.Vector2 gauss1 = GaussianRandom();
-                    UnityEngine.Vector2 gauss2 = GaussianRandom();
-
-                    float kAngle = Mathf.Atan2(K.y, K.x);
-                    float omega = DispersionRelation(kLength);
-                    float dOmegadk = DispersionDerivative(kLength);
-
-                    float S = JONSWAP(omega) * DirectionSpectrum(kAngle, omega) * ShortWavesFade(kLength);
-
-                    float amplitude = Mathf.Sqrt(
-                        2.0f *
-                        S *
-                        Mathf.Abs(dOmegadk) /
-                        kLength *
-                        deltaK *
-                        deltaK);
-
-                    initialSpectrum[x, y] =
-                        new Complex(
-                            gauss1.x * amplitude,
-                            gauss2.y * amplitude
-                        );
-                }
-                else
-                {
-                    initialSpectrum[x, y] = Complex.Zero;
-                }
-            }
-        }
-
-        for (int y = 0; y < meshResolution; y++)
-        {
-            for (int x = 0; x < meshResolution; x++)
-            {
-                int conjugateX = (meshResolution - x) % meshResolution;
-                int conjugateY = (meshResolution - y) % meshResolution;
-
-                conjugateSpectrum[x, y] = Complex.Conjugate(initialSpectrum[conjugateX, conjugateY]);
-
-                initialSpectrumTexture.SetPixel(
-                    x,
-                    y,
-                    new Color(
-                        (float)initialSpectrum[x, y].Real,
-                        (float)initialSpectrum[x, y].Imaginary,
-                        (float)conjugateSpectrum[x, y].Real,
-                        (float)conjugateSpectrum[x, y].Imaginary
-                    )
-                );
-            }
-        }
-
-        // Apply the texture
-        initialSpectrumTexture.Apply(false, false);
+        // fftComputeShader.SetFloat("_MeshResolution", resolution);
+        // fftComputeShader.SetFloat("_MeshSize", size);
+        // fftComputeShader.SetFloat("_RepeatTime", repeatTime);
     }
 }

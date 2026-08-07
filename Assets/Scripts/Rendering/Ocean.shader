@@ -25,14 +25,10 @@ Shader "Custom/Ocean"
             StructuredBuffer<float3> _DisplacedVertices;
             StructuredBuffer<float3> _Normals;
 
-            TEXTURE2D(_DisplacementTexture);
-            TEXTURE2D(_SlopeTexture);
-
-            // Declare the first texture (displacement) and its sampler.
-            // UNITY_DECLARE_TEX2D(_DisplacementTexture);
-
-            // Declare the second texture (slope) without samplers.
-            // UNITY_DECLARE_TEX2D_NOSAMPLER(_SlopeTexture);
+            TEXTURE2D_ARRAY(_DisplacementTextures);
+            TEXTURE2D_ARRAY(_SlopeTextures);
+            SAMPLER(sampler_DisplacementTextures);
+            SAMPLER(sampler_SlopeTextures);
 
             int _ActiveWaveGenerator;
 
@@ -77,11 +73,10 @@ Shader "Custom/Ocean"
                 // FFT
                 else if (_ActiveWaveGenerator == 1)
                 {
-                    // todo: maybe remove this
                     float2 uv = float2(
                         IN.uv.x,
                         1.0 - IN.uv.y);
-                    float4 displacement = SAMPLE_TEXTURE2D_LOD(_DisplacementTexture, sampler_LinearClamp, IN.uv, 0);
+                    float4 displacement = SAMPLE_TEXTURE2D_ARRAY_LOD(_DisplacementTextures, sampler_DisplacementTextures, uv, 0, 0);
                     positionOS = IN.positionOS.xyz + displacement.xyz;
                 }
                 // Hybrid
@@ -130,7 +125,7 @@ Shader "Custom/Ocean"
                 // FFT
                 else if (_ActiveWaveGenerator == 1)
                 {
-                    float4 slope = SAMPLE_TEXTURE2D(_SlopeTexture, sampler_LinearClamp, IN.uv);
+                    float4 slope = SAMPLE_TEXTURE2D_ARRAY_LOD(_SlopeTextures, sampler_SlopeTextures, IN.uv, 0, 0);
                     normal = normalize(float3(-slope.x, 1.0, -slope.y));
                 }
                 // Hybrid

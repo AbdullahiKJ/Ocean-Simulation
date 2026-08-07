@@ -42,12 +42,13 @@ public class OceanRenderer : MonoBehaviour
         // Get the original vertices
         originalVertices = mesh.vertices;
 
+        // todo: uncomment later
         // Get all kernels
         gerstnerKernel = gerstnerComputeShader.FindKernel("GerstnerMain");
-        advanceKernel = fftComputeShader.FindKernel("Advance");
-        verticalFFTKernel = fftComputeShader.FindKernel("VerticalFFT");
-        horizontalFFTKernel = fftComputeShader.FindKernel("HorizontalFFT");
-        fftMainKernel = fftComputeShader.FindKernel("FFTMain");
+        // advanceKernel = fftComputeShader.FindKernel("Advance");
+        // verticalFFTKernel = fftComputeShader.FindKernel("VerticalFFT");
+        // horizontalFFTKernel = fftComputeShader.FindKernel("HorizontalFFT");
+        // fftMainKernel = fftComputeShader.FindKernel("FFTMain");
 
         // switch (activeGenerator)
         // {
@@ -62,7 +63,8 @@ public class OceanRenderer : MonoBehaviour
         //         break;
         // }
         UploadGerstnerParameters();
-        UploadFFTParameters();
+        // todo: uncomment later
+        // UploadFFTParameters();
 
         // Assign the active wave generator
         activeWaveGenerator = activeGenerator;
@@ -147,65 +149,6 @@ public class OceanRenderer : MonoBehaviour
                 gerstnerComputeShader.Dispatch(gerstnerKernel, threadGroups, 1, 1);
                 break;
             case WaveGenerator.FFT:
-                threadGroups = resolution / 8;
-                fftComputeShader.Dispatch(advanceKernel, threadGroups, threadGroups, 1);
-
-                RenderTexture read = displacementSpectrumA;
-                RenderTexture write = displacementSpectrumB;
-
-                RenderTexture slopeRead = slopeSpectrumA;
-                RenderTexture slopeWrite = slopeSpectrumB;
-
-                int stages = (int)Mathf.Log(resolution, 2);
-                for (int stage = 0; stage < stages; stage++)
-                {
-                    fftComputeShader.SetTexture(verticalFFTKernel, "_DisplacementSpectrumInput", read);
-                    fftComputeShader.SetTexture(verticalFFTKernel, "_DisplacementSpectrumOutput", write);
-
-                    fftComputeShader.SetTexture(verticalFFTKernel, "_SlopeSpectrumInput", slopeRead);
-                    fftComputeShader.SetTexture(verticalFFTKernel, "_SlopeSpectrumOutput", slopeWrite);
-
-                    fftComputeShader.SetInt("_Stage", stage);
-                    fftComputeShader.Dispatch(verticalFFTKernel, resolution, 1, 1);
-
-                    // swap displacement spectrum
-                    var temp = read;
-                    read = write;
-                    write = temp;
-
-                    // swap slope spectrum
-                    temp = slopeRead;
-                    slopeRead = slopeWrite;
-                    slopeWrite = temp;
-                }
-                for (int stage = 0; stage < stages; stage++)
-                {
-                    fftComputeShader.SetTexture(horizontalFFTKernel, "_DisplacementSpectrumInput", read);
-                    fftComputeShader.SetTexture(horizontalFFTKernel, "_DisplacementSpectrumOutput", write);
-
-                    fftComputeShader.SetTexture(horizontalFFTKernel, "_SlopeSpectrumInput", slopeRead);
-                    fftComputeShader.SetTexture(horizontalFFTKernel, "_SlopeSpectrumOutput", slopeWrite);
-
-                    fftComputeShader.SetInt("_Stage", stage);
-                    fftComputeShader.Dispatch(horizontalFFTKernel, resolution, 1, 1);
-
-                    // swap displacement spectrum
-                    var temp = read;
-                    read = write;
-                    write = temp;
-
-                    // swap slope spectrum
-                    temp = slopeRead;
-                    slopeRead = slopeWrite;
-                    slopeWrite = temp;
-                }
-
-                // Assign the final displacement and slope spectrum read textures to the compute shader for rendering
-                fftComputeShader.SetTexture(fftMainKernel, "_DisplacementSpectrumInput", read);
-                fftComputeShader.SetTexture(fftMainKernel, "_SlopeSpectrumInput", slopeRead);
-
-                // Dispatch the main kernel to compute the final displacement and slope textures
-                fftComputeShader.Dispatch(fftMainKernel, threadGroups, threadGroups, 1);
                 break;
             case WaveGenerator.Hybrid:
                 break;

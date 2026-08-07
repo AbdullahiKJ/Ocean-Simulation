@@ -58,22 +58,43 @@ float3 EvaluateGerstner(float3 position)
 
 float3 CalculateNormal(float3 position)
 {
-    float offset = 0.1;
+    float3 tangentX = float3(1.0, 0.0, 0.0);
+    float3 tangentZ = float3(0.0, 0.0, 1.0);
 
-    float hL = EvaluateGerstner(position - float3(offset,0,0)).y;
-    float hR = EvaluateGerstner(position + float3(offset,0,0)).y;
+    for (int i = 0; i < _WaveCount; i++)
+    {
+        Wave wave = _Waves[i];
 
-    float hD = EvaluateGerstner(position - float3(0,0,offset)).y;
-    float hU = EvaluateGerstner(position + float3(0,0,offset)).y;
+        float phase = wave.waveNumber * dot(wave.direction, position.xz) - wave.omega * _Time;
 
+        float sinPhase = sin(phase);
+        float cosPhase = cos(phase);
 
-    float3 normal = float3(
-        hL - hR,
-        2.0 * offset,
-        hD - hU
-    );
+        float A = wave.amplitude;
+        float k = wave.waveNumber;
+        float Q = wave.steepness;
 
-    return normalize(normal);
+        float Dx = wave.direction.x;
+        float Dz = wave.direction.y;
+
+        float common = Q * A * k * sinPhase;
+
+        // Derivative with respect to x
+        tangentX += float3(
+            -common * Dx * Dx,
+             A * k * Dx * cosPhase,
+            -common * Dx * Dz
+        );
+
+        // Derivative with respect to z
+        tangentZ += float3(
+            -common * Dx * Dz,
+             A * k * Dz * cosPhase,
+            -common * Dz * Dz
+        );
+    }
+
+    return normalize(cross(tangentZ, tangentX));
 }
 
 [numthreads(64,1,1)]
@@ -81,10 +102,11 @@ void GerstnerMain (uint3 id : SV_DispatchThreadID)
 {
     uint index = id.x;
 
-    float3 vertex = _OriginalVertices[index];
+    float3 originalVertex = _OriginalVertices[index];
 
-    vertex += EvaluateGerstner(vertex);
+    float3 displacement = EvaluateGerstner(originalVertex);
+    float3 displacedVertex = originalVertex + displacement;
 
-    _DisplacedVertices[index] = vertex;
-    _Normals[index] = CalculateNormal(vertex);
+    _DisplacedVertices[index] = displacedVertex;
+    _Normals[index] = CalculateNormal(originalVertex);
 }

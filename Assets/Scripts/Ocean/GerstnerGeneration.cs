@@ -11,10 +11,15 @@ public class GerstnerGeneration : MonoBehaviour, IWaveGeneration
     Wave[] waves;
     // Wave generation configuration
     [SerializeField] int waveCount = 0;
-    [SerializeField] Vector2 amplitudeRange = Vector2.zero;
-    [SerializeField] Vector2 wavelengthRange = Vector2.zero;
-    [SerializeField] Vector2 steepnessRange = Vector2.zero;
+    [SerializeField] float initialAmplitude = 1f;
+    [SerializeField] float initialWavelength = 1f;
+    [SerializeField] float amplitudeScaler = 1f;
+    [SerializeField] float wavelengthScaler = 1f;
+    [SerializeField] float steepnessParameter = 1f;
     [SerializeField] Vector2 directionRange = Vector2.zero;
+    [SerializeField] float medianWavelength = 1f;
+    [SerializeField] float medianAmplitude = 1f;
+    [SerializeField] float wavelengthRange = 1f;
 
     struct Wave
     {
@@ -70,14 +75,18 @@ public class GerstnerGeneration : MonoBehaviour, IWaveGeneration
     // Generate a list of wave parameters based on the configuration ranges
     void GenerateWaveParameters()
     {
+        float wavelengthMin = medianWavelength / (1.0f + wavelengthRange);
+        float wavelengthMax = medianWavelength * (1.0f + wavelengthRange);
+        float ampOverLen = medianAmplitude / medianWavelength;
+
         for (int i = 0; i < waveCount; i++)
         {
-            float wavelength = Random.Range(wavelengthRange.x, wavelengthRange.y);
-            float amplitude = Random.Range(amplitudeRange.x, amplitudeRange.y);
+            float wavelength = Random.Range(wavelengthMin, wavelengthMax);
+            float amplitude = wavelength * ampOverLen;
             float directionDeg = Random.Range(directionRange.x, directionRange.y);
             float directionRad = directionDeg * Mathf.Deg2Rad;
-            float steepness = Random.Range(steepnessRange.x, steepnessRange.y);
             float waveNumber = 2 * Mathf.PI / wavelength;
+            float steepness = steepnessParameter / (waveNumber * amplitude);
 
             waves[i] = new Wave
             {

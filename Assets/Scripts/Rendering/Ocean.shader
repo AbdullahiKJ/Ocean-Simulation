@@ -31,6 +31,7 @@ Shader "Custom/Ocean"
             SAMPLER(sampler_SlopeTextures);
 
             int _ActiveWaveGenerator;
+            float _HybridScale;
 
             struct Attributes
             {
@@ -67,7 +68,7 @@ Shader "Custom/Ocean"
                 // Gerstner
                 if (_ActiveWaveGenerator == 0)
                 {
-                    positionOS = _DisplacedVertices[IN.vertexID];
+                    positionOS = IN.positionOS.xyz + _DisplacedVertices[IN.vertexID];
                     normalOS = TransformObjectToWorldNormal(_Normals[IN.vertexID]);
                 }
                 // FFT
@@ -76,14 +77,34 @@ Shader "Custom/Ocean"
                     float2 uv = float2(
                         IN.uv.x,
                         1.0 - IN.uv.y);
-                    float4 displacement = SAMPLE_TEXTURE2D_ARRAY_LOD(_DisplacementTextures, sampler_DisplacementTextures, uv, 0, 0);
+                    float4 displacement1 = SAMPLE_TEXTURE2D_ARRAY_LOD(_DisplacementTextures, sampler_DisplacementTextures, uv, 0, 0);
+                    float4 displacement2 = SAMPLE_TEXTURE2D_ARRAY_LOD(_DisplacementTextures, sampler_DisplacementTextures, uv, 1, 0);
+                    float4 displacement3 = SAMPLE_TEXTURE2D_ARRAY_LOD(_DisplacementTextures, sampler_DisplacementTextures, uv, 2, 0);
+                    float4 displacement4 = SAMPLE_TEXTURE2D_ARRAY_LOD(_DisplacementTextures, sampler_DisplacementTextures, uv, 3, 0);
+                    float4 displacement = displacement1 + displacement2 + displacement3 + displacement4;
                     positionOS = IN.positionOS.xyz + displacement.xyz;
                 }
                 // Hybrid
-                // todo: add hybrid
                 else
                 {
-                    positionOS = IN.positionOS.xyz + float3(0.0, 10.0, 0.0);
+                    // Get Gerstner displacement and normal
+                    float3 gerstnerDisplacement = _DisplacedVertices[IN.vertexID];
+                    normalOS = TransformObjectToWorldNormal(_Normals[IN.vertexID]);
+
+                    // Get FFT displacement
+                    float2 uv = float2(
+                        IN.uv.x,
+                        1.0 - IN.uv.y);
+                    float4 displacement1 = SAMPLE_TEXTURE2D_ARRAY_LOD(_DisplacementTextures, sampler_DisplacementTextures, uv, 0, 0);
+                    float4 displacement2 = SAMPLE_TEXTURE2D_ARRAY_LOD(_DisplacementTextures, sampler_DisplacementTextures, uv, 1, 0);
+                    float4 displacement3 = SAMPLE_TEXTURE2D_ARRAY_LOD(_DisplacementTextures, sampler_DisplacementTextures, uv, 2, 0);
+                    float4 displacement4 = SAMPLE_TEXTURE2D_ARRAY_LOD(_DisplacementTextures, sampler_DisplacementTextures, uv, 3, 0);
+                    float4 fftDisplacement = displacement1 + displacement2 + displacement3 + displacement4;
+
+                    // Combine the displacements from both Gerstner and FFT methods, scaled by the hybrid scale factor
+                    float3 combinedDisplacement = (gerstnerDisplacement + fftDisplacement.xyz) * _HybridScale;
+                    // Combine Gerstner and FFT displacements
+                    positionOS = IN.positionOS.xyz + combinedDisplacement;
                 }
 
                 OUT.normalWS = TransformObjectToWorldNormal(normalOS);
@@ -125,13 +146,31 @@ Shader "Custom/Ocean"
                 // FFT
                 else if (_ActiveWaveGenerator == 1)
                 {
-                    float4 slope = SAMPLE_TEXTURE2D_ARRAY_LOD(_SlopeTextures, sampler_SlopeTextures, IN.uv, 0, 0);
+                    float4 slope1 = SAMPLE_TEXTURE2D_ARRAY_LOD(_SlopeTextures, sampler_SlopeTextures, IN.uv, 0, 0);
+                    float4 slope2 = SAMPLE_TEXTURE2D_ARRAY_LOD(_SlopeTextures, sampler_SlopeTextures, IN.uv, 1, 0);
+                    float4 slope3 = SAMPLE_TEXTURE2D_ARRAY_LOD(_SlopeTextures, sampler_SlopeTextures, IN.uv, 2, 0);
+                    float4 slope4 = SAMPLE_TEXTURE2D_ARRAY_LOD(_SlopeTextures, sampler_SlopeTextures, IN.uv, 3, 0);
+                    float4 slope = slope1 + slope2 + slope3 + slope4;
+
                     normal = normalize(float3(-slope.x, 1.0, -slope.y));
                 }
                 // Hybrid
-                // todo: implement hybrid
                 else
                 {
+                    // Gerstner
+                    normal = normalize(IN.normalWS);
+
+                    // FFT
+                    float4 slope1 = SAMPLE_TEXTURE2D_ARRAY_LOD(_SlopeTextures, sampler_SlopeTextures, IN.uv, 0, 0);
+                    float4 slope2 = SAMPLE_TEXTURE2D_ARRAY_LOD(_SlopeTextures, sampler_SlopeTextures, IN.uv, 1, 0);
+                    float4 slope3 = SAMPLE_TEXTURE2D_ARRAY_LOD(_SlopeTextures, sampler_SlopeTextures, IN.uv, 2, 0);
+                    float4 slope4 = SAMPLE_TEXTURE2D_ARRAY_LOD(_SlopeTextures, sampler_SlopeTextures, IN.uv, 3, 0);
+                    float4 slope = slope1 + slope2 + slope3 + slope4;
+                    float3 fftNormal = float3(-slope.x, 1.0, -slope.y);
+
+                    // Combine Gerstner and FFT normals
+                    normal += fftNormal;
+                    normal = normalize(normal);
                 }
 
                 float3 viewDir = normalize(_WorldSpaceCameraPos - IN.positionWS);

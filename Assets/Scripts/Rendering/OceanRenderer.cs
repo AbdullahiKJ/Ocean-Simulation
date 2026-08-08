@@ -16,23 +16,17 @@ public class OceanRenderer : MonoBehaviour
 
     WaveGenerator activeWaveGenerator;
     int resolution;
+    float hybridScale;
     int gerstnerKernel;
-    int advanceKernel;
-    int verticalFFTKernel;
-    int horizontalFFTKernel;
-    int fftMainKernel;
 
     // Displacement and slope spectrum textures
-    RenderTexture displacementSpectrumA;
-    RenderTexture displacementSpectrumB;
-    RenderTexture slopeSpectrumA;
-    RenderTexture slopeSpectrumB;
     RenderTexture displacementTexture;
     RenderTexture slopeTexture;
 
-    public void Initialise(Mesh generatedMesh, WaveGenerator activeGenerator, int resolution)
+    public void Initialise(Mesh generatedMesh, WaveGenerator activeGenerator, int resolution, float hybridScale)
     {
         this.resolution = resolution;
+        this.hybridScale = hybridScale;
 
         // Get the mesh filter and mesh components and assign the generated mesh to the mesh filter
         meshFilter = GetComponentInChildren<MeshFilter>();
@@ -42,39 +36,25 @@ public class OceanRenderer : MonoBehaviour
         // Get the original vertices
         originalVertices = mesh.vertices;
 
-        // todo: uncomment later
-        // Get all kernels
-        gerstnerKernel = gerstnerComputeShader.FindKernel("GerstnerMain");
-        // advanceKernel = fftComputeShader.FindKernel("Advance");
-        // verticalFFTKernel = fftComputeShader.FindKernel("VerticalFFT");
-        // horizontalFFTKernel = fftComputeShader.FindKernel("HorizontalFFT");
-        // fftMainKernel = fftComputeShader.FindKernel("FFTMain");
-
-        // switch (activeGenerator)
-        // {
-        //     case WaveGenerator.Gerstner:
-        //         UploadGerstnerParameters();
-        //         break;
-        //     case WaveGenerator.FFT:
-        //         UploadFFTParameters();
-        //         break;
-        // todo: implement hybrid
-        //     case WaveGenerator.Hybrid:
-        //         break;
-        // }
+        // Upload parameters for the Gerstner and FFT wave generators
         UploadGerstnerParameters();
-        // todo: uncomment later
-        // UploadFFTParameters();
+        UploadFFTParameters();
 
         // Assign the active wave generator
         activeWaveGenerator = activeGenerator;
 
         // Assign the active wave generator to the material
         oceanMaterial.SetInt("_ActiveWaveGenerator", activeGenerator == WaveGenerator.Gerstner ? 0 : activeGenerator == WaveGenerator.FFT ? 1 : 2);
+
+        // Assign the hybrid scale to the material
+        oceanMaterial.SetFloat("_HybridScale", hybridScale);
     }
 
     void UploadGerstnerParameters()
     {
+        // Get the Gerstner main kernel
+        gerstnerKernel = gerstnerComputeShader.FindKernel("GerstnerMain");
+
         // Create compute buffers for the original and displaced vertices and normals and asssign the data to them
         originalVertexBuffer = new ComputeBuffer(originalVertices.Length, sizeof(float) * 3);
         displacedVertexBuffer = new ComputeBuffer(originalVertices.Length, sizeof(float) * 3);
@@ -90,53 +70,9 @@ public class OceanRenderer : MonoBehaviour
         oceanMaterial.SetBuffer("_Normals", normalsBuffer);
     }
 
+    // todo: parameters are currently uploaded from the fft generation script
     void UploadFFTParameters()
     {
-        // Create textures for the displacement and slope spectrums and textures
-        displacementSpectrumA = new RenderTexture(resolution, resolution, 0, RenderTextureFormat.ARGBFloat)
-        {
-            enableRandomWrite = true
-        };
-        displacementSpectrumA.Create();
-        displacementSpectrumB = new RenderTexture(resolution, resolution, 0, RenderTextureFormat.ARGBFloat)
-        {
-            enableRandomWrite = true
-        };
-        displacementSpectrumB.Create();
-
-        slopeSpectrumA = new RenderTexture(resolution, resolution, 0, RenderTextureFormat.ARGBFloat)
-        {
-            enableRandomWrite = true
-        };
-        slopeSpectrumA.Create();
-        slopeSpectrumB = new RenderTexture(resolution, resolution, 0, RenderTextureFormat.ARGBFloat)
-        {
-            enableRandomWrite = true
-        };
-        slopeSpectrumB.Create();
-
-        displacementTexture = new RenderTexture(resolution, resolution, 0, RenderTextureFormat.ARGBFloat)
-        {
-            enableRandomWrite = true
-        };
-        displacementTexture.Create();
-        slopeTexture = new RenderTexture(resolution, resolution, 0, RenderTextureFormat.ARGBFloat)
-        {
-            enableRandomWrite = true
-        };
-        slopeTexture.Create();
-
-        fftComputeShader.SetTexture(advanceKernel, "_DisplacementSpectrumInput", displacementSpectrumA);
-        fftComputeShader.SetTexture(advanceKernel, "_SlopeSpectrumInput", slopeSpectrumA);
-
-        fftComputeShader.SetTexture(advanceKernel, "_DisplacementSpectrumOutput", displacementSpectrumA);
-        fftComputeShader.SetTexture(advanceKernel, "_SlopeSpectrumOutput", slopeSpectrumA);
-
-        fftComputeShader.SetTexture(fftMainKernel, "_DisplacementTexture", displacementTexture);
-        fftComputeShader.SetTexture(fftMainKernel, "_SlopeTexture", slopeTexture);
-
-        oceanMaterial.SetTexture("_DisplacementTexture", displacementTexture);
-        oceanMaterial.SetTexture("_SlopeTexture", slopeTexture);
     }
 
     public void Render()
@@ -151,6 +87,7 @@ public class OceanRenderer : MonoBehaviour
             case WaveGenerator.FFT:
                 break;
             case WaveGenerator.Hybrid:
+                gerstnerComputeShader.Dispatch(gerstnerKernel, threadGroups, 1, 1);
                 break;
         }
     }

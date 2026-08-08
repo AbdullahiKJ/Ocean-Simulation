@@ -11,10 +11,6 @@ public class GerstnerGeneration : MonoBehaviour, IWaveGeneration
     Wave[] waves;
     // Wave generation configuration
     [SerializeField] int waveCount = 0;
-    [SerializeField] float initialAmplitude = 1f;
-    [SerializeField] float initialWavelength = 1f;
-    [SerializeField] float amplitudeScaler = 1f;
-    [SerializeField] float wavelengthScaler = 1f;
     [SerializeField] float steepnessParameter = 1f;
     [SerializeField] Vector2 directionRange = Vector2.zero;
     [SerializeField] float medianWavelength = 1f;

@@ -2,7 +2,6 @@ using UnityEngine;
 
 public class OceanManager : MonoBehaviour
 {
-    float simulationTime = 0.0f;
     [SerializeField] GerstnerGeneration gerstnerGeneration;
     [SerializeField] FFTGeneration fftGeneration;
     [SerializeField] WaveGenerator activeWaveGenerator;
@@ -12,6 +11,7 @@ public class OceanManager : MonoBehaviour
     [SerializeField] MeshGenerator meshGenerator;
     [SerializeField] int meshResolution = 0;
     [SerializeField] float meshSize = 0;
+    [SerializeField] float hybridScale = 1.0f;
 
     void Start()
     {
@@ -22,13 +22,12 @@ public class OceanManager : MonoBehaviour
     {
         // Generate the mesh for the ocean surface
         Mesh newMesh = meshGenerator.GenerateMesh(meshResolution, meshSize);
-        oceanRenderer.Initialise(newMesh, activeWaveGenerator, meshResolution);
+        oceanRenderer.Initialise(newMesh, activeWaveGenerator, meshResolution, hybridScale);
         SetWaveGenerator();
     }
 
     void Update()
     {
-        simulationTime += Time.deltaTime;
         switch (activeWaveGenerator)
         {
             case WaveGenerator.Gerstner:
@@ -44,10 +43,6 @@ public class OceanManager : MonoBehaviour
         }
 
         oceanRenderer.Render();
-
-        // Calculate horizontal displacement
-        // Add horizontal displacement to the height map
-        // Pass the height map to the renderer
     }
 
     // Set the active wave generator based on the selected option

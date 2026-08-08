@@ -80,6 +80,7 @@ public class FFTGeneration : MonoBehaviour, IWaveGeneration
     [Range(0.0f, 10.0f)]
     public float displacementDepthFalloff = 1.0f;
     public int layerCount = 2;
+    public bool updateSpectrum = false;
 
     [Header("Layer One")]
     [Range(0, 2048)]
@@ -212,6 +213,15 @@ public class FFTGeneration : MonoBehaviour, IWaveGeneration
     public void UpdateGenerator()
     {
         SetFFTUniforms();
+        // debugging: this allows you to update the spectrum every frame, but it is not necessary for normal operation
+        if (updateSpectrum)
+        {
+            SetSpectrumBuffers();
+            fftComputeShader.SetTexture(0, "_InitialSpectrumTextures", initialSpectrumTextures);
+            fftComputeShader.Dispatch(0, threadGroupsX, threadGroupsY, 1);
+            fftComputeShader.SetTexture(1, "_InitialSpectrumTextures", initialSpectrumTextures);
+            fftComputeShader.Dispatch(1, threadGroupsX, threadGroupsY, 1);
+        }
 
         // Progress Spectrum For FFT
         fftComputeShader.SetTexture(2, "_InitialSpectrumTextures", initialSpectrumTextures);
@@ -235,6 +245,7 @@ public class FFTGeneration : MonoBehaviour, IWaveGeneration
         oceanMaterial.SetTexture("_SlopeTextures", slopeTextures);
     }
 
+    // todo: maybe move this to the ocean renderer script
     // Upload the spectrum data to the compute shader for rendering
     public void UploadToShader()
     {

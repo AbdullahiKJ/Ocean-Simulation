@@ -179,8 +179,34 @@ public class FFTGeneration : MonoBehaviour, IWaveGeneration
         fftComputeShader.Dispatch(4, 1, resolution, 1);
     }
 
-    public void Initialise(int meshResolution, float meshSize)
+    void AssignPreset(WavePreset preset)
     {
+        FFTSettings fftPreset = preset.fft;
+        if (preset == null)
+            return;
+
+        seed = fftPreset.seed;
+        lowCutoff = fftPreset.lowCutoff;
+        highCutoff = fftPreset.highCutoff;
+        gravity = fftPreset.gravity;
+        depth = fftPreset.depth;
+        repeatTime = fftPreset.repeatTime;
+        speed = fftPreset.speed;
+        lambda = fftPreset.lambda;
+        displacementDepthFalloff = fftPreset.displacementDepthFalloff;
+        layerCount = fftPreset.layerCount;
+        lengthScale1 = fftPreset.lengthScale1;
+        spectrum1 = fftPreset.spectrum1;
+        spectrum2 = fftPreset.spectrum2;
+        lengthScale2 = fftPreset.lengthScale2;
+        spectrum3 = fftPreset.spectrum3;
+        spectrum4 = fftPreset.spectrum4;
+
+    }
+
+    public void Initialise(int meshResolution, float meshSize, WavePreset preset)
+    {
+        AssignPreset(preset);
         resolution = meshResolution;
         size = meshSize;
 

@@ -28,8 +28,22 @@ public class GerstnerGeneration : MonoBehaviour, IWaveGeneration
         public float waveNumber;
     }
 
-    public void Initialise(int meshResolution, float meshSize)
+    void AssignPreset(WavePreset preset)
     {
+        GerstnerSettings gPreset = preset.gerstner;
+        if (preset == null)
+            return;
+
+        waveCount = gPreset.waveCount;
+        steepnessParameter = gPreset.steepnessParameter;
+        directionRange = gPreset.directionRange;
+        medianWavelength = gPreset.medianWavelength;
+        medianAmplitude = gPreset.medianAmplitude;
+        wavelengthRange = gPreset.wavelengthRange;
+    }
+    public void Initialise(int meshResolution, float meshSize, WavePreset preset)
+    {
+        AssignPreset(preset);
         waves = new Wave[waveCount];
         GenerateWaveParameters();
 

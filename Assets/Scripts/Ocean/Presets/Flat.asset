@@ -1,0 +1,70 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 53a1e2cfdcec8455e814bf3f89d08c7f, type: 3}
+  m_Name: Flat
+  m_EditorClassIdentifier: Assembly-CSharp::GerstnerPreset
+  gerstner:
+    waveCount: 1
+    steepnessParameter: 0
+    directionRange: {x: 0, y: 0}
+    medianWavelength: 1
+    medianAmplitude: 0
+    wavelengthRange: 0
+  fft:
+    seed: 0
+    lowCutoff: 0.0001
+    highCutoff: 9000
+    gravity: 9.81
+    depth: 20
+    repeatTime: 200
+    speed: 1
+    lambda: {x: 1, y: 1}
+    displacementDepthFalloff: 1
+    layerCount: 2
+    lengthScale1: 256
+    spectrum1:
+      scale: 0
+      windSpeed: 0.01
+      windDirection: 0
+      fetch: 0
+      spreadBlend: 0
+      swell: 0
+      peakEnhancement: 0
+      shortWavesFade: 0
+    spectrum2:
+      scale: 0
+      windSpeed: 0.01
+      windDirection: 0
+      fetch: 0
+      spreadBlend: 0
+      swell: 0
+      peakEnhancement: 0
+      shortWavesFade: 0
+    lengthScale2: 256
+    spectrum3:
+      scale: 0
+      windSpeed: 0.01
+      windDirection: 0
+      fetch: 0
+      spreadBlend: 0
+      swell: 0
+      peakEnhancement: 0
+      shortWavesFade: 0
+    spectrum4:
+      scale: 0
+      windSpeed: 0.01
+      windDirection: 0
+      fetch: 0
+      spreadBlend: 0
+      swell: 0
+      peakEnhancement: 0
+      shortWavesFade: 0

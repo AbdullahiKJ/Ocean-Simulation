@@ -12,6 +12,7 @@ public class OceanManager : MonoBehaviour
     [SerializeField] int meshResolution = 0;
     [SerializeField] float meshSize = 0;
     [SerializeField] float hybridScale = 1.0f;
+    [SerializeField] WavePreset wavePreset = null;
 
     void Start()
     {
@@ -51,14 +52,14 @@ public class OceanManager : MonoBehaviour
         switch (activeWaveGenerator)
         {
             case WaveGenerator.Gerstner:
-                gerstnerGeneration.Initialise(meshResolution, meshSize);
+                gerstnerGeneration.Initialise(meshResolution, meshSize, wavePreset);
                 break;
             case WaveGenerator.FFT:
-                fftGeneration.Initialise(meshResolution, meshSize);
+                fftGeneration.Initialise(meshResolution, meshSize, wavePreset);
                 break;
             case WaveGenerator.Hybrid:
-                gerstnerGeneration.Initialise(meshResolution, meshSize);
-                fftGeneration.Initialise(meshResolution, meshSize);
+                gerstnerGeneration.Initialise(meshResolution, meshSize, wavePreset);
+                fftGeneration.Initialise(meshResolution, meshSize, wavePreset);
                 break;
         }
     }

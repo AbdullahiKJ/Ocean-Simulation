@@ -17,7 +17,7 @@ MonoBehaviour:
     steepnessParameter: 0
     directionRange: {x: 0, y: 0}
     medianWavelength: 1
-    medianAmplitude: 0
+    medianAmplitude: 0.01
     wavelengthRange: 0
   fft:
     seed: 0

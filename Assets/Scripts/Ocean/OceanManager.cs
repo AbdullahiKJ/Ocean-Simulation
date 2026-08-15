@@ -4,13 +4,13 @@ public class OceanManager : MonoBehaviour
 {
     [SerializeField] GerstnerGeneration gerstnerGeneration;
     [SerializeField] FFTGeneration fftGeneration;
-    [SerializeField] WaveGenerator activeWaveGenerator;
+    public WaveGenerator activeWaveGenerator;
     [SerializeField] OceanRenderer oceanRenderer;
 
     // Wave generation configuration
     [SerializeField] MeshGenerator meshGenerator;
-    [SerializeField] int meshResolution = 0;
-    [SerializeField] float meshSize = 0;
+    public int meshResolution = 0;
+    public float meshSize = 0;
     [SerializeField] float hybridScale = 1.0f;
     [SerializeField] WavePreset wavePreset = null;
 

@@ -18,6 +18,7 @@ public class OceanRenderer : MonoBehaviour
     int resolution;
     float hybridScale;
     int gerstnerKernel;
+    int sampleKernel;
 
     // Displacement and slope spectrum textures
     RenderTexture displacementTexture;
@@ -52,8 +53,9 @@ public class OceanRenderer : MonoBehaviour
 
     void UploadGerstnerParameters()
     {
-        // Get the Gerstner main kernel
+        // Get the Gerstner main kernel and sample kernel
         gerstnerKernel = gerstnerComputeShader.FindKernel("GerstnerMain");
+        sampleKernel = gerstnerComputeShader.FindKernel("CS_ExtractOceanPatch");
 
         // Create compute buffers for the original and displaced vertices and normals and asssign the data to them
         originalVertexBuffer = new ComputeBuffer(originalVertices.Length, sizeof(float) * 3);
@@ -65,6 +67,10 @@ public class OceanRenderer : MonoBehaviour
         gerstnerComputeShader.SetBuffer(gerstnerKernel, "_OriginalVertices", originalVertexBuffer);
         gerstnerComputeShader.SetBuffer(gerstnerKernel, "_DisplacedVertices", displacedVertexBuffer);
         gerstnerComputeShader.SetBuffer(gerstnerKernel, "_Normals", normalsBuffer);
+
+        // Set the displacement and normal buffers for the ocean sample kernel
+        gerstnerComputeShader.SetBuffer(sampleKernel, "_DisplacedVertices", displacedVertexBuffer);
+        gerstnerComputeShader.SetBuffer(sampleKernel, "_Normals", normalsBuffer);
 
         oceanMaterial.SetBuffer("_DisplacedVertices", displacedVertexBuffer);
         oceanMaterial.SetBuffer("_Normals", normalsBuffer);

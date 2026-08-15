@@ -8,6 +8,7 @@
 #pragma kernel CS_HorizontalFFT
 #pragma kernel CS_VerticalFFT
 #pragma kernel CS_AssembleMaps
+#pragma kernel CS_ExtractOceanPatch
 #pragma kernel CS_AccumulateFoam
 
 #define PI 3.14159265358979323846
@@ -16,7 +17,7 @@ RWTexture2DArray<float4> _SpectrumTextures, _InitialSpectrumTextures, _Displacem
 RWTexture2DArray<float2> _SlopeTextures;
 RWTexture2D<half> _BuoyancyData;
 
-float _FrameTime, _Gravity, _RepeatTime, _Depth, _LowCutoff, _HighCutoff;
+float _FrameTime, _Gravity, _RepeatTime, _Depth, _LowCutoff, _HighCutoff, _MeshSize;
 int _Seed;
 float2 _Lambda;
 uint _N, _LengthScale0, _LengthScale1, _LayerCount;
@@ -312,6 +313,59 @@ void CS_AssembleMaps(uint3 id : SV_DISPATCHTHREADID) {
     }
 }
 
+// Buoyancy sample texture
+struct OceanSample
+{
+    float height;
+    float3 normal;
+};
+
+RWStructuredBuffer<OceanSample> _OceanSamples;
+float3 _PatchCentre;
+uint _PatchResolution;
+
+[numthreads(8,8,1)]
+void CS_ExtractOceanPatch(uint3 id : SV_DISPATCHTHREADID)
+{
+    if (id.x >= _PatchResolution ||
+        id.y >= _PatchResolution)
+        return;
+
+    float2 uv = (id.xy + 0.5) / _PatchResolution;
+
+    // Convert patch UV into world position
+    float2 worldXZ = _PatchCentre.xz + (uv - 0.5) * (float(_PatchResolution)/float(_N) * _MeshSize);
+
+    // Convert world position to ocean texture coordinates
+    float2 oceanUV = worldXZ / _MeshSize;
+
+    // Get the displacement and slope values
+    float3 displacement = float3(0,0,0);
+    float2 slope = float2(0,0);
+    for (uint layer = 0; layer < 4; layer++)
+    {
+        displacement +=
+            _DisplacementTextures[uint3(
+                oceanUV * _N,
+                layer
+            )];
+
+        slope +=
+            _SlopeTextures[uint3(
+                oceanUV * _N,
+                layer
+            )];
+    }
+
+    float3 normal = normalize(float3(-slope.x, 1.0, -slope.y));
+
+    OceanSample sample;
+
+    sample.height = displacement.y;
+    sample.normal = normal;
+
+    _OceanSamples[id.y * _PatchResolution + id.x] = sample;
+}
 
 float gaussian(int x, int y) {
     float _Spread = 0.5f;

@@ -1,5 +1,6 @@
 // Each #kernel tells which function to compile; you can have many kernels
 #pragma kernel GerstnerMain
+#pragma kernel CS_ExtractOceanPatch
 
 // Wave structure to hold wave parameters
 struct Wave
@@ -109,4 +110,53 @@ void GerstnerMain (uint3 id : SV_DispatchThreadID)
 
     _DisplacedVertices[index] = displacedVertex;
     _Normals[index] = CalculateNormal(originalVertex);
+}
+
+// Buoyancy sample texture
+struct OceanSample
+{
+    float height;
+    float3 normal;
+};
+
+RWStructuredBuffer<OceanSample> _OceanSamples;
+float3 _PatchCentre;
+uint _PatchResolution;
+uint _N;
+float _MeshSize;
+
+[numthreads(8,8,1)]
+void CS_ExtractOceanPatch(uint3 id : SV_DISPATCHTHREADID)
+{
+    if (id.x >= _PatchResolution ||
+        id.y >= _PatchResolution)
+        return;
+
+    float2 uv = (id.xy + 0.5) / _PatchResolution;
+
+    // Convert patch UV into world position
+    float2 worldXZ = _PatchCentre.xz + (uv - 0.5) * (float(_PatchResolution)/float(_N) * _MeshSize);
+
+    // Convert world position to ocean texture coordinates
+    float2 oceanUV = worldXZ / _MeshSize;
+
+    // Convert UV into integer vertex coordinates
+    uint2 vertexCoord = uint2(
+        clamp(oceanUV.x * (_N - 1), 0.0f, float(_N - 1)),
+        clamp(oceanUV.y * (_N - 1), 0.0f, float(_N - 1))
+    );
+
+     // Convert 2D coordinate into a 1D buffer index
+    uint vertexIndex = vertexCoord.y * _N + vertexCoord.x;
+
+    // Get the displacement and normal values
+    float3 displacement = _DisplacedVertices[vertexIndex];
+    float3 normal = _Normals[vertexIndex];
+
+    OceanSample sample;
+
+    sample.height = displacement.y;
+    sample.normal = normal;
+
+    _OceanSamples[id.y * _PatchResolution + id.x] = sample;
 }

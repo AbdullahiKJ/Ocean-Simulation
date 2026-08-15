@@ -7,6 +7,8 @@ public class GerstnerGeneration : MonoBehaviour, IWaveGeneration
     float simulationTime = 0.0f;
     ComputeBuffer waveBuffer;
     int kernel;
+    float size;
+    int resolution;
 
     Wave[] waves;
     // Wave generation configuration
@@ -43,6 +45,8 @@ public class GerstnerGeneration : MonoBehaviour, IWaveGeneration
     }
     public void Initialise(int meshResolution, float meshSize, WavePreset preset)
     {
+        size = meshSize;
+        resolution = meshResolution;
         AssignPreset(preset);
         waves = new Wave[waveCount];
         GenerateWaveParameters();
@@ -80,6 +84,8 @@ public class GerstnerGeneration : MonoBehaviour, IWaveGeneration
         gerstnerComputeShader.SetBuffer(kernel, "_Waves", waveBuffer);
 
         gerstnerComputeShader.SetInt("_WaveCount", waveCount);
+        gerstnerComputeShader.SetFloat("_MeshSize", size);
+        gerstnerComputeShader.SetInt("_N", resolution);
     }
 
     // Generate a list of wave parameters based on the configuration ranges

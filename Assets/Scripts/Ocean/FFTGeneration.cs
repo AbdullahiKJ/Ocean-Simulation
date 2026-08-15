@@ -127,6 +127,7 @@ public class FFTGeneration : MonoBehaviour, IWaveGeneration
         fftComputeShader.SetInt("_Seed", seed);
         fftComputeShader.SetInt("_LengthScale0", lengthScale1);
         fftComputeShader.SetInt("_LengthScale1", lengthScale2);
+        fftComputeShader.SetFloat("_MeshSize", size);
         // fftComputeShader.SetFloat("_NormalStrength", normalStrength);
         // fftComputeShader.SetFloat("_FoamThreshold", foamThreshold);
         fftComputeShader.SetFloat("_Depth", depth);
@@ -261,6 +262,8 @@ public class FFTGeneration : MonoBehaviour, IWaveGeneration
         fftComputeShader.SetTexture(5, "_DisplacementTextures", displacementTextures);
         fftComputeShader.SetTexture(5, "_SpectrumTextures", spectrumTextures);
         fftComputeShader.SetTexture(5, "_SlopeTextures", slopeTextures);
+        fftComputeShader.SetTexture(6, "_DisplacementTextures", displacementTextures);
+        fftComputeShader.SetTexture(6, "_SlopeTextures", slopeTextures);
         // fftComputeShader.SetTexture(5, "_BuoyancyData", buoyancyDataTex);
         fftComputeShader.Dispatch(5, threadGroupsX, threadGroupsY, 1);
 

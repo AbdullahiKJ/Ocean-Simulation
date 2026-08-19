@@ -323,6 +323,7 @@ struct OceanSample
 RWStructuredBuffer<OceanSample> _OceanSamples;
 float3 _PatchCentre;
 uint _PatchResolution;
+float _PatchSize;
 
 [numthreads(8,8,1)]
 void CS_ExtractOceanPatch(uint3 id : SV_DISPATCHTHREADID)
@@ -331,10 +332,11 @@ void CS_ExtractOceanPatch(uint3 id : SV_DISPATCHTHREADID)
         id.y >= _PatchResolution)
         return;
 
+    // Get the local patch UV from (0,0) to (1,1)
     float2 uv = (id.xy + 0.5) / _PatchResolution;
 
     // Convert patch UV into world position
-    float2 worldXZ = _PatchCentre.xz + (uv - 0.5) * (float(_PatchResolution)/float(_N) * _MeshSize);
+    float2 worldXZ = _PatchCentre.xz + (uv - 0.5) * _PatchSize;
 
     // Convert world position to ocean texture coordinates
     float2 oceanUV = worldXZ / _MeshSize;

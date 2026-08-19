@@ -28,13 +28,13 @@ public class VesselPhysics : MonoBehaviour
             Vector3 pos = buoyancyValues.submergedCentroids[i];
 
             // Add the buoyancy force
-            rb.AddForceAtPosition(buoyancyValues.buoyancyForces[i], pos, ForceMode.Acceleration);
+            rb.AddForceAtPosition(buoyancyValues.buoyancyForces[i], pos, ForceMode.Force);
 
             // Add the water drag force against velocity
-            rb.AddForce(buoyancyValues.waterDrag[i], ForceMode.VelocityChange);
+            rb.AddForce(buoyancyValues.waterDrag[i], ForceMode.Force);
 
             // Add the water angular drag torque against angular velocity
-            rb.AddTorque(buoyancyValues.angularDrag[i], ForceMode.VelocityChange);
+            rb.AddTorque(buoyancyValues.angularDrag[i], ForceMode.Force);
         }
     }
 }

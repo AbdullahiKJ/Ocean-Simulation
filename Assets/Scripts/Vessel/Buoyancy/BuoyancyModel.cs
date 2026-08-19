@@ -8,6 +8,7 @@ interface IBuoyancyModel
 public enum BuoyancyModel
 {
     Point,
+    Voxel,
     Volume,
     Partitioned
 }

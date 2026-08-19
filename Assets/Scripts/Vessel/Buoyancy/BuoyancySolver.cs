@@ -8,13 +8,14 @@ public class BuoyancySolver : MonoBehaviour
     [SerializeField] ComputeShader fftCompute;
     [SerializeField] ComputeShader gerstnerCompute;
     [SerializeField] PointBuoyancy pointBuoyancy;
+    [SerializeField] VoxelBuoyancy voxelBuoyancy;
     [SerializeField] VolumeBuoyancy volumeBuoyancy;
     [SerializeField] PartitionedBuoyancy partitionedBuoyancy;
     [SerializeField] BuoyancyModel activeModel;
     [SerializeField] float vesselMass;
     [SerializeField] Transform vesselTransform;
     [SerializeField] Mesh vesselMesh;
-    [SerializeField] float waterDensity = 1000f;
+    public float waterDensity = 1000f;
     [SerializeField] int patchResolution = 32;
     [SerializeField] float patchSize = 10f;
     [SerializeField] float gravity = 9.81f;
@@ -123,6 +124,14 @@ public class BuoyancySolver : MonoBehaviour
                     oceanSampleArray,
                     meshConfig,
                     rb);
+                break;
+            case BuoyancyModel.Voxel:
+                voxelBuoyancy.CalculateForces(
+                    out buoyancyValues,
+                    oceanSampleArray,
+                    meshConfig,
+                    rb
+                );
                 break;
             case BuoyancyModel.Volume:
                 // pointBuoyancy.CalculateSubmergedVolume(sumbergedVolumes, sumbergedCentroids);

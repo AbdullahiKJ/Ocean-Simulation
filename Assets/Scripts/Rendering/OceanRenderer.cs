@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 public class OceanRenderer : MonoBehaviour
@@ -37,15 +38,25 @@ public class OceanRenderer : MonoBehaviour
         // Get the original vertices
         originalVertices = mesh.vertices;
 
-        // Upload parameters for the Gerstner and FFT wave generators
+        // Upload parameters for the Gerstner, FFT and Flat wave generators
         UploadGerstnerParameters();
         UploadFFTParameters();
+        UploadFlatParameters();
 
         // Assign the active wave generator
         activeWaveGenerator = activeGenerator;
 
         // Assign the active wave generator to the material
-        oceanMaterial.SetInt("_ActiveWaveGenerator", activeGenerator == WaveGenerator.Gerstner ? 0 : activeGenerator == WaveGenerator.FFT ? 1 : 2);
+        int generatorInt = 0;
+        if (activeGenerator == WaveGenerator.Gerstner)
+            generatorInt = 0;
+        else if (activeGenerator == WaveGenerator.FFT)
+            generatorInt = 1;
+        else if (activeGenerator == WaveGenerator.Hybrid)
+            generatorInt = 2;
+        else if (activeGenerator == WaveGenerator.Flat)
+            generatorInt = 3;
+        oceanMaterial.SetInt("_ActiveWaveGenerator", generatorInt);
 
         // Assign the hybrid scale to the material
         oceanMaterial.SetFloat("_HybridScale", hybridScale);
@@ -79,6 +90,24 @@ public class OceanRenderer : MonoBehaviour
     // todo: parameters are currently uploaded from the fft generation script
     void UploadFFTParameters()
     {
+    }
+
+    void UploadFlatParameters()
+    {
+        // Create compute buffers for the displaced vertices and normals
+        displacedVertexBuffer = new ComputeBuffer(originalVertices.Length, sizeof(float) * 3);
+        normalsBuffer = new ComputeBuffer(originalVertices.Length, sizeof(float) * 3);
+
+        // Create an array filled with the up vector
+        Vector3[] normalsArray = new Vector3[originalVertices.Length];
+        Array.Fill(normalsArray, Vector3.up);
+
+        // Assign the original vertices and normals to their respective buffers
+        displacedVertexBuffer.SetData(originalVertices);
+        normalsBuffer.SetData(normalsArray);
+
+        oceanMaterial.SetBuffer("_DisplacedVertices", displacedVertexBuffer);
+        oceanMaterial.SetBuffer("_Normals", normalsBuffer);
     }
 
     public void Render()

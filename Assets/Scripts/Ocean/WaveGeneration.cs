@@ -9,6 +9,7 @@ interface IWaveGeneration
 
 public enum WaveGenerator
 {
+    Flat,
     Gerstner,
     FFT,
     Hybrid

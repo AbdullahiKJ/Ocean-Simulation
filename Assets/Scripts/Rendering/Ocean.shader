@@ -65,8 +65,8 @@ Shader "Custom/Ocean"
                 float3 positionOS = float3(0.0, 0.0, 0.0);
                 float3 normalOS = float3(0.0, 1.0, 0.0);
 
-                // Gerstner
-                if (_ActiveWaveGenerator == 0)
+                // Gerstner and Flat
+                if (_ActiveWaveGenerator == 0 || _ActiveWaveGenerator == 3)
                 {
                     positionOS = IN.positionOS.xyz + _DisplacedVertices[IN.vertexID];
                     normalOS = TransformObjectToWorldNormal(_Normals[IN.vertexID]);
@@ -138,8 +138,8 @@ Shader "Custom/Ocean"
             {
                 float3 normal = float3(0.0, 0.0, 0.0);
 
-                // Gerstner
-                if (_ActiveWaveGenerator == 0)
+                // Gerstner and flat
+                if (_ActiveWaveGenerator == 0 || _ActiveWaveGenerator == 3)
                 {
                     normal = normalize(IN.normalWS);
                 }
@@ -155,7 +155,7 @@ Shader "Custom/Ocean"
                     normal = normalize(float3(-slope.x, 1.0, -slope.y));
                 }
                 // Hybrid
-                else
+                else if (_ActiveWaveGenerator == 2)
                 {
                     // Gerstner
                     normal = normalize(IN.normalWS);

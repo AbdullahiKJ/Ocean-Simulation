@@ -2,6 +2,7 @@ using UnityEngine;
 
 public class OceanManager : MonoBehaviour
 {
+    [SerializeField] FlatGeneration flatGeneration;
     [SerializeField] GerstnerGeneration gerstnerGeneration;
     [SerializeField] FFTGeneration fftGeneration;
     public WaveGenerator activeWaveGenerator;
@@ -31,6 +32,9 @@ public class OceanManager : MonoBehaviour
     {
         switch (activeWaveGenerator)
         {
+            case WaveGenerator.Flat:
+                flatGeneration.UpdateGenerator();
+                break;
             case WaveGenerator.Gerstner:
                 gerstnerGeneration.UpdateGenerator();
                 break;
@@ -51,6 +55,9 @@ public class OceanManager : MonoBehaviour
     {
         switch (activeWaveGenerator)
         {
+            case WaveGenerator.Flat:
+                flatGeneration.Initialise(meshResolution, meshSize, wavePreset);
+                break;
             case WaveGenerator.Gerstner:
                 gerstnerGeneration.Initialise(meshResolution, meshSize, wavePreset);
                 break;

@@ -1,6 +1,7 @@
 using UnityEngine;
 using System.Runtime.InteropServices;
 using UnityEngine.Rendering;
+using System;
 
 public class BuoyancySolver : MonoBehaviour
 {
@@ -183,6 +184,13 @@ public class BuoyancySolver : MonoBehaviour
 
         switch (oceanManager.activeWaveGenerator)
         {
+            // For the flat wave generator, return a height of 0 and the up Vector for all patch vertices
+            case WaveGenerator.Flat:
+                oceanSampleArray = new OceanSample[patchResolution * patchResolution];
+                OceanSample defaultValue = new OceanSample { height = 0f, normal = Vector3.up };
+                Array.Fill(oceanSampleArray, defaultValue);
+                readbackPending = false;
+                break;
             case WaveGenerator.Gerstner:
                 AsyncGPUReadback.Request(gerstnerSampleBuffer, request => OnGPUReadback(request));
                 break;

@@ -41,7 +41,8 @@ public class OceanRenderer : MonoBehaviour
         // Upload parameters for the Gerstner, FFT and Flat wave generators
         UploadGerstnerParameters();
         UploadFFTParameters();
-        UploadFlatParameters();
+        if (activeGenerator == WaveGenerator.Flat)
+            UploadFlatParameters();
 
         // Assign the active wave generator
         activeWaveGenerator = activeGenerator;

@@ -15,11 +15,9 @@ public class BuoyancySolver : MonoBehaviour
     [SerializeField] BuoyancyModel activeModel;
     [SerializeField] float vesselMass;
     [SerializeField] Transform vesselTransform;
-    [SerializeField] Mesh vesselMesh;
     public float waterDensity = 1000f;
     [SerializeField] int patchResolution = 32;
     [SerializeField] float patchSize = 10f;
-    [SerializeField] float gravity = 9.81f;
     ComputeBuffer gerstnerSampleBuffer;
     ComputeBuffer fftSampleBuffer;
     OceanSample[] oceanSampleArray;
@@ -135,10 +133,20 @@ public class BuoyancySolver : MonoBehaviour
                 );
                 break;
             case BuoyancyModel.Volume:
-                // pointBuoyancy.CalculateSubmergedVolume(sumbergedVolumes, sumbergedCentroids);
+                volumeBuoyancy.CalculateForces(
+                    out buoyancyValues,
+                    oceanSampleArray,
+                    meshConfig,
+                    rb
+                );
                 break;
             case BuoyancyModel.Partitioned:
-                // pointBuoyancy.CalculateSubmergedVolume(sumbergedVolumes, sumbergedCentroids);
+                // partitionedBuoyancy.CalculateForces(
+                //     out buoyancyValues,
+                //     oceanSampleArray,
+                //     meshConfig,
+                //     rb
+                // );
                 break;
         }
 
@@ -190,6 +198,7 @@ public class BuoyancySolver : MonoBehaviour
                 OceanSample defaultValue = new OceanSample { height = 0f, normal = Vector3.up };
                 Array.Fill(oceanSampleArray, defaultValue);
                 readbackPending = false;
+                meshConfig.patchCentre = requestedPatchCentre;
                 break;
             case WaveGenerator.Gerstner:
                 AsyncGPUReadback.Request(gerstnerSampleBuffer, request => OnGPUReadback(request));

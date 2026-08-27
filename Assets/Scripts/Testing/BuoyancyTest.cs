@@ -142,7 +142,7 @@ public class BuoyancyTest : MonoBehaviour
                 textAccumulatedTime = 0f;
             }
 
-            // 1. Convert Unity's 0-360 angle to a stable -180 to 180 range
+            // Convert Unity's 0-360 angle to a stable -180 to 180 range
             float rawX = vessel.localEulerAngles.x;
             float currentAngle = rawX > 180f ? rawX - 360f : rawX;
             float currentAbsAngle = Mathf.Abs(currentAngle);
@@ -178,11 +178,16 @@ public class BuoyancyTest : MonoBehaviour
 
     void StartRotationTest()
     {
+        // Reset the mass
+        rb.mass = massRange[0];
+        // Move the cube up and rotate along the x axis
         Vector3 currentPos = vessel.position;
         currentPos.y = 10f;
         vessel.position = currentPos;
         Vector3 newRotation = new Vector3(initialRotation, 0f, 0f);
         vessel.localEulerAngles = newRotation;
+
+        // Assign initial values for the max angle and previous angles
         prevAngle1 = initialRotation;
         prevAngle2 = prevAngle1;
         maxAngle = initialRotation;

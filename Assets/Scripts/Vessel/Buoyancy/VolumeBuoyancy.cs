@@ -12,7 +12,7 @@ public class VolumeBuoyancy : MonoBehaviour
     private BuoyancySolver buoyancySolver;
     List<Triangle> vesselTriangles = new List<Triangle>();
     Vector3 submergedCentroid;
-    struct Triangle
+    public struct Triangle
     {
         public Vector3 a;
         public Vector3 b;
@@ -30,7 +30,7 @@ public class VolumeBuoyancy : MonoBehaviour
     {
         buoyancySolver = GetComponent<BuoyancySolver>();
 
-        BuildTriangleList();
+        BuildTriangleList(vesselTriangles, vesselParent);
     }
 
     public void CalculateForces(
@@ -53,7 +53,7 @@ public class VolumeBuoyancy : MonoBehaviour
         Vector3 referencePoint = vesselParent.transform.position;
         referencePoint.y = oceanSamples[GetClosestVertex(meshConfig, vesselParent.transform.position)].height;
 
-        submergedTriangles = GetSubmergedTriangles(oceanSamples, meshConfig);
+        submergedTriangles = GetSubmergedTriangles(oceanSamples, meshConfig, vesselTriangles, vesselParent);
 
         if (submergedTriangles.Count == 0)
             return;
@@ -89,7 +89,7 @@ public class VolumeBuoyancy : MonoBehaviour
         return;
     }
 
-    private Vector3 CalculateCentroidAndVolume(
+    public static Vector3 CalculateCentroidAndVolume(
     List<Triangle> triangles,
     Vector3 referencePoint,
     out float volume
@@ -165,7 +165,7 @@ public class VolumeBuoyancy : MonoBehaviour
 
         return totalArea;
     }
-    private List<Vector3> ClipTriangle(
+    public static List<Vector3> ClipTriangle(
         Vector3 a,
         Vector3 b,
         Vector3 c,
@@ -236,7 +236,7 @@ public class VolumeBuoyancy : MonoBehaviour
         return output;
     }
 
-    private Vector3 GetWaterIntersection(
+    public static Vector3 GetWaterIntersection(
         Vector3 a,
         Vector3 b,
         BuoyancySolver.OceanSample[] oceanSamples,
@@ -259,7 +259,7 @@ public class VolumeBuoyancy : MonoBehaviour
         return midPoint;
     }
 
-    private void AddClippedTriangles(
+    public static void AddClippedTriangles(
     List<Vector3> polygon,
     List<Triangle> result)
     {
@@ -302,19 +302,21 @@ public class VolumeBuoyancy : MonoBehaviour
         return;
     }
 
-    private List<Triangle> GetSubmergedTriangles(
+    public static List<Triangle> GetSubmergedTriangles(
         BuoyancySolver.OceanSample[] oceanSamples,
-        BuoyancySolver.MeshConfiguration meshConfig
+        BuoyancySolver.MeshConfiguration meshConfig,
+        List<Triangle> triangleList,
+        GameObject vessel
     )
     {
         List<Triangle> submerged = new List<Triangle>();
 
-        foreach (Triangle triangle in vesselTriangles)
+        foreach (Triangle triangle in triangleList)
         {
             // Convert from local space to world space
-            Vector3 a = vesselParent.transform.TransformPoint(triangle.a);
-            Vector3 b = vesselParent.transform.TransformPoint(triangle.b);
-            Vector3 c = vesselParent.transform.TransformPoint(triangle.c);
+            Vector3 a = vessel.transform.TransformPoint(triangle.a);
+            Vector3 b = vessel.transform.TransformPoint(triangle.b);
+            Vector3 c = vessel.transform.TransformPoint(triangle.c);
 
             List<Vector3> polygon = ClipTriangle(a, b, c, oceanSamples, meshConfig);
 
@@ -324,7 +326,7 @@ public class VolumeBuoyancy : MonoBehaviour
         return submerged;
     }
 
-    int GetClosestVertex(BuoyancySolver.MeshConfiguration meshConfig, Vector3 pos)
+    public static int GetClosestVertex(BuoyancySolver.MeshConfiguration meshConfig, Vector3 pos)
     {
         // Get the position relative to the centre of the patch
         Vector2 localPos = new Vector2(
@@ -348,7 +350,7 @@ public class VolumeBuoyancy : MonoBehaviour
         return y * meshConfig.patchResolution + x;
     }
 
-    private void BuildTriangleList()
+    public static void BuildTriangleList(List<Triangle> vesselTriangles, GameObject vesselParent)
     {
         vesselTriangles.Clear();
 

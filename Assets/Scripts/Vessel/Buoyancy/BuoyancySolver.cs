@@ -75,8 +75,8 @@ public class BuoyancySolver : MonoBehaviour
                 fftCompute.SetBuffer(6, "_OceanSamples", fftSampleBuffer);
                 break;
             case WaveGenerator.Hybrid:
-                // fftCompute.SetBuffer(6, "_OceanSamples", fftSampleBuffer);
-                // gerstnerCompute.SetBuffer(1, "_OceanSamples", gerstnerSampleBuffer);
+                fftCompute.SetBuffer(6, "_OceanSamples", fftSampleBuffer);
+                gerstnerCompute.SetBuffer(1, "_OceanSamples", gerstnerSampleBuffer);
                 break;
         }
     }
@@ -141,12 +141,12 @@ public class BuoyancySolver : MonoBehaviour
                 );
                 break;
             case BuoyancyModel.Partitioned:
-                // partitionedBuoyancy.CalculateForces(
-                //     out buoyancyValues,
-                //     oceanSampleArray,
-                //     meshConfig,
-                //     rb
-                // );
+                partitionedBuoyancy.CalculateForces(
+                    out buoyancyValues,
+                    oceanSampleArray,
+                    meshConfig,
+                    rb
+                );
                 break;
         }
 

@@ -51,6 +51,7 @@ public class VolumeBuoyancy : MonoBehaviour
         };
 
         Vector3 referencePoint = vesselParent.transform.position;
+        referencePoint.y = oceanSamples[GetClosestVertex(meshConfig, vesselParent.transform.position)].height;
 
         submergedTriangles = GetSubmergedTriangles(oceanSamples, meshConfig);
 
@@ -144,8 +145,8 @@ public class VolumeBuoyancy : MonoBehaviour
 
         // todo: simpler method
         Vector3 velocity = rb.GetPointVelocity(submergedCentroid);
-        float damping = 5000f;
-        return -velocity * damping;
+        // float damping = 5000f;
+        return -velocity * buoyancySolver.vesselMass;
     }
 
     private float CalculateSubmergedArea(List<Triangle> triangles)
@@ -388,11 +389,5 @@ public class VolumeBuoyancy : MonoBehaviour
                 vesselTriangles.Add(new Triangle(localA, localB, localC));
             }
         }
-    }
-
-    private void OnDrawGizmos()
-    {
-        Gizmos.color = Color.green;
-        Gizmos.DrawCube(submergedCentroid, 0.1f * Vector3.one);
     }
 }

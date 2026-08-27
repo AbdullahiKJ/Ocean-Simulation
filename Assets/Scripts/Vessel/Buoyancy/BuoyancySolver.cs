@@ -12,8 +12,8 @@ public class BuoyancySolver : MonoBehaviour
     [SerializeField] VoxelBuoyancy voxelBuoyancy;
     [SerializeField] VolumeBuoyancy volumeBuoyancy;
     [SerializeField] PartitionedBuoyancy partitionedBuoyancy;
-    [SerializeField] BuoyancyModel activeModel;
-    [SerializeField] float vesselMass;
+    public BuoyancyModel activeModel;
+    public float vesselMass;
     [SerializeField] Transform vesselTransform;
     public float waterDensity = 1000f;
     [SerializeField] int patchResolution = 32;

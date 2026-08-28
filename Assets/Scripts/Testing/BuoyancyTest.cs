@@ -10,7 +10,6 @@ public class BuoyancyTest : MonoBehaviour
     BuoyancySolver buoyancySolver;
     TextMeshProUGUI text;
     [SerializeField] float massRecordTime = 10.0f;
-    [SerializeField] float rotRecordTime = 30.0f;
     [SerializeField] float textUpdateInterval = 0.1f;
     [SerializeField] Vector2 massRange;
     [SerializeField] float massTests = 5f;

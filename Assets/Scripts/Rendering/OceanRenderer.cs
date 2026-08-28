@@ -95,6 +95,19 @@ public class OceanRenderer : MonoBehaviour
 
     void UploadFlatParameters()
     {
+        // Release buffers before creating new ones
+        if (displacedVertexBuffer != null)
+        {
+            displacedVertexBuffer.Dispose();
+            displacedVertexBuffer = null;
+        }
+
+        if (normalsBuffer != null)
+        {
+            normalsBuffer.Dispose();
+            normalsBuffer = null;
+        }
+
         // Create compute buffers for the displaced vertices and normals
         displacedVertexBuffer = new ComputeBuffer(originalVertices.Length, sizeof(float) * 3);
         normalsBuffer = new ComputeBuffer(originalVertices.Length, sizeof(float) * 3);

@@ -68,7 +68,7 @@ Shader "Custom/Ocean"
                 // Gerstner and Flat
                 if (_ActiveWaveGenerator == 0 || _ActiveWaveGenerator == 3)
                 {
-                    positionOS = IN.positionOS.xyz + _DisplacedVertices[IN.vertexID];
+                    positionOS = _DisplacedVertices[IN.vertexID];
                     normalOS = TransformObjectToWorldNormal(_Normals[IN.vertexID]);
                 }
                 // FFT
@@ -88,7 +88,8 @@ Shader "Custom/Ocean"
                 else
                 {
                     // Get Gerstner displacement and normal
-                    float3 gerstnerDisplacement = _DisplacedVertices[IN.vertexID];
+                    float3 gerstnerPosition = _DisplacedVertices[IN.vertexID];
+                    float3 gerstnerDisplacement = gerstnerPosition - IN.positionOS.xyz;
                     normalOS = TransformObjectToWorldNormal(_Normals[IN.vertexID]);
 
                     // Get FFT displacement

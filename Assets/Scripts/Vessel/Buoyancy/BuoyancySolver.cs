@@ -21,9 +21,11 @@ public class BuoyancySolver : MonoBehaviour
     ComputeBuffer gerstnerSampleBuffer;
     ComputeBuffer fftSampleBuffer;
     OceanSample[] oceanSampleArray;
+    OceanSample[] gerstnerSamples;
+    OceanSample[] fftSamples;
     Rigidbody rb;
     bool readbackPending;
-    int multipleReadbacksPending = 0;
+    int hybridReadbacks = 0;
     Vector3 requestedPatchCentre;
     public struct OceanSample
     {
@@ -208,9 +210,9 @@ public class BuoyancySolver : MonoBehaviour
                 break;
             case WaveGenerator.Hybrid:
                 // Get the Gerstner sample
-                AsyncGPUReadback.Request(gerstnerSampleBuffer, request => OnMultipleGPUReadback(request));
+                AsyncGPUReadback.Request(gerstnerSampleBuffer, request => OnGerstnerReadback(request));
                 // Get the FFT sample
-                AsyncGPUReadback.Request(fftSampleBuffer, request => OnMultipleGPUReadback(request));
+                AsyncGPUReadback.Request(fftSampleBuffer, request => OnFFTReadback(request));
                 break;
         }
     }
@@ -228,40 +230,53 @@ public class BuoyancySolver : MonoBehaviour
         meshConfig.patchCentre = requestedPatchCentre;
     }
 
-    void OnMultipleGPUReadback(AsyncGPUReadbackRequest request)
+    void OnGerstnerReadback(AsyncGPUReadbackRequest request)
     {
         if (request.hasError)
+        {
+            readbackPending = false;
+            return;
+        }
+
+        gerstnerSamples = request.GetData<OceanSample>().ToArray();
+        FinishHybridReadback();
+    }
+
+    void OnFFTReadback(AsyncGPUReadbackRequest request)
+    {
+        if (request.hasError)
+        {
+            readbackPending = false;
+            return;
+        }
+
+        fftSamples = request.GetData<OceanSample>().ToArray();
+        FinishHybridReadback();
+    }
+
+    void FinishHybridReadback()
+    {
+        hybridReadbacks++;
+
+        if (hybridReadbacks < 2)
             return;
 
-        var samples = request.GetData<OceanSample>();
+        oceanSampleArray = new OceanSample[patchResolution * patchResolution];
 
-        // Create a new array for the first readback and assign the sample values
-        if (multipleReadbacksPending == 0)
-            oceanSampleArray = samples.ToArray();
-        // For the second readback, add the new sample values to the existing array
-        else
+        for (int i = 0; i < oceanSampleArray.Length; i++)
         {
-            OceanSample[] sampleArray = samples.ToArray();
-            for (int i = 0; i < oceanSampleArray.Length; i++)
-            {
-                oceanSampleArray[i].height += sampleArray[i].height;
-                oceanSampleArray[i].normal = (oceanSampleArray[i].normal + sampleArray[i].normal).normalized;
-            }
+            oceanSampleArray[i].height =
+                gerstnerSamples[i].height +
+                fftSamples[i].height;
+
+            oceanSampleArray[i].normal =
+                (gerstnerSamples[i].normal +
+                 fftSamples[i].normal).normalized;
         }
 
-        // Update the mesh config patch centre
         meshConfig.patchCentre = requestedPatchCentre;
 
-        // Don't change the readback pending flag unless both have been returned
-        if (multipleReadbacksPending < 2)
-        {
-            multipleReadbacksPending++;
-            readbackPending = true;
-        }
-        else
-        {
-            multipleReadbacksPending = 0;
-        }
+        readbackPending = false;
     }
 
     void OnDrawGizmos()

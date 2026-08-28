@@ -15,7 +15,7 @@ public class PerformanceTest : MonoBehaviour
     float textAccumulatedTime = 0f;
     bool testStarted = false;
 
-    void OnEnable()
+    public void Initialise()
     {
         testManager = GetComponent<TestManager>();
         oceanManager = testManager.oceanManager;

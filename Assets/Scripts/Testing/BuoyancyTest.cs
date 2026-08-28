@@ -29,7 +29,7 @@ public class BuoyancyTest : MonoBehaviour
     Rigidbody rb;
     Transform vessel;
 
-    void OnEnable()
+    public void Initialise()
     {
         // Get the test manager, ocean manager and buoyancy solver
         testManager = GetComponent<TestManager>();
@@ -142,10 +142,11 @@ public class BuoyancyTest : MonoBehaviour
                 textAccumulatedTime = 0f;
             }
 
-            // Convert Unity's 0-360 angle to a stable -180 to 180 range
-            float rawX = vessel.localEulerAngles.x;
-            float currentAngle = rawX > 180f ? rawX - 360f : rawX;
-            float currentAbsAngle = Mathf.Abs(currentAngle);
+            // Get the angle between the upward facing cube face and the world up vector
+            float currentAbsAngle = Vector3.Angle(vessel.up, Vector3.up);
+            if (currentAbsAngle > initialRotation)
+                currentAbsAngle = Vector3.Angle(-vessel.forward, Vector3.up);
+
 
             // Exit if the angle is repeated
             if (currentAbsAngle == prevAngle1)

@@ -102,40 +102,4 @@ public class PartitionedBuoyancy : MonoBehaviour
         if (!front && !right) return 2;
         return 3;
     }
-
-    void OnDrawGizmos()
-    {
-        float size = 0.1f;
-        if (partitions.Length > 0)
-        {
-            for (int i = 0; i < 4; i++)
-            {
-                foreach (Triangle triangle in partitions[i])
-                {
-                    switch (i)
-                    {
-                        case 0:
-                            Gizmos.color = Color.blue;
-                            break;
-                        case 1:
-                            Gizmos.color = Color.red;
-                            break;
-                        case 2:
-                            Gizmos.color = Color.green;
-                            break;
-                        case 3:
-                            Gizmos.color = Color.yellow;
-                            break;
-                    }
-                    Vector3 a = vesselParent.transform.TransformPoint(triangle.a);
-                    Vector3 b = vesselParent.transform.TransformPoint(triangle.b);
-                    Vector3 c = vesselParent.transform.TransformPoint(triangle.c);
-
-                    Gizmos.DrawSphere(a, size);
-                    Gizmos.DrawSphere(b, size);
-                    Gizmos.DrawSphere(c, size);
-                }
-            }
-        }
-    }
 }

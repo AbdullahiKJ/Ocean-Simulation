@@ -33,10 +33,33 @@ public class TestManager : MonoBehaviour
         vesselTest = GetComponent<VesselTest>();
         buoyancyTest = GetComponent<BuoyancyTest>();
 
+        // Initialise test parameters
+        InitialiseTest();
+
         // Run tests on play
         if (runOnAwake)
             RunActiveTest();
     }
+
+    void InitialiseTest()
+    {
+        switch (activeTest)
+        {
+            case TestCase.Performance:
+                performanceTest.Initialise();
+                break;
+            case TestCase.Ocean:
+                oceanTest.Initialise();
+                break;
+            case TestCase.Vessel:
+                vesselTest.Initialise();
+                break;
+            case TestCase.Buoyancy:
+                buoyancyTest.Initialise();
+                break;
+        }
+    }
+
     public void RunActiveTest()
     {
         switch (activeTest)

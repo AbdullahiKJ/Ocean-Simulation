@@ -20,7 +20,7 @@ public class BuoyancySolver : MonoBehaviour
     [SerializeField] float patchSize = 10f;
     ComputeBuffer gerstnerSampleBuffer;
     ComputeBuffer fftSampleBuffer;
-    OceanSample[] oceanSampleArray;
+    public OceanSample[] oceanSampleArray;
     OceanSample[] gerstnerSamples;
     OceanSample[] fftSamples;
     Rigidbody rb;
@@ -49,7 +49,7 @@ public class BuoyancySolver : MonoBehaviour
         public Vector3[] angularDrag;
         public Vector3[] submergedCentroids;
     }
-    MeshConfiguration meshConfig;
+    public MeshConfiguration meshConfig;
     Buoyancy buoyancyValues;
 
     void Start()

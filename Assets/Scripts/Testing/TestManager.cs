@@ -71,7 +71,7 @@ public class TestManager : MonoBehaviour
                 oceanTest.RunTest();
                 break;
             case TestCase.Vessel:
-                vesselTest.RunTest();
+                vesselTest.RunTest(waveGenerator, buoyancyModel);
                 break;
             case TestCase.Buoyancy:
                 buoyancyTest.RunTest(buoyancyModel);

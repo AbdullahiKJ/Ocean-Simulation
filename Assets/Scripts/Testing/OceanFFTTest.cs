@@ -1,12 +1,18 @@
 using UnityEngine;
 
-public class OceanTest : MonoBehaviour
+public class OceanFFTTest : MonoBehaviour
 {
     public void Initialise()
     {
 
     }
+
     public void RunTest()
+    {
+
+    }
+
+    void Update()
     {
 
     }

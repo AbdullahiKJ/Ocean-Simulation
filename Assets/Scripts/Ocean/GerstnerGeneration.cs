@@ -4,22 +4,22 @@ using System.Runtime.InteropServices;
 public class GerstnerGeneration : MonoBehaviour, IWaveGeneration
 {
     [SerializeField] ComputeShader gerstnerComputeShader;
-    float simulationTime = 0.0f;
+    public float simulationTime = 0.0f;
     ComputeBuffer waveBuffer;
     int kernel;
     float size;
     int resolution;
 
-    Wave[] waves;
+    public Wave[] waves;
     // Wave generation configuration
-    [SerializeField] int waveCount = 0;
+    public int waveCount = 0;
     [SerializeField] float steepnessParameter = 1f;
     [SerializeField] Vector2 directionRange = Vector2.zero;
     [SerializeField] float medianWavelength = 1f;
     [SerializeField] float medianAmplitude = 1f;
     [SerializeField] float wavelengthRange = 1f;
 
-    struct Wave
+    public struct Wave
     {
         // Configrable parameters
         public float amplitude;

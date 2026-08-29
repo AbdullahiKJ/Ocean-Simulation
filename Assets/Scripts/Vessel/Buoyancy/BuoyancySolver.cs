@@ -16,8 +16,8 @@ public class BuoyancySolver : MonoBehaviour
     public float vesselMass;
     [SerializeField] Transform vesselTransform;
     public float waterDensity = 1000f;
-    [SerializeField] int patchResolution = 32;
-    [SerializeField] float patchSize = 10f;
+    public int patchResolution = 32;
+    public float patchSize = 10f;
     ComputeBuffer gerstnerSampleBuffer;
     ComputeBuffer fftSampleBuffer;
     public OceanSample[] oceanSampleArray;

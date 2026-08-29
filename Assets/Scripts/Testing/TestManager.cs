@@ -4,7 +4,8 @@ using UnityEngine;
 public class TestManager : MonoBehaviour
 {
     PerformanceTest performanceTest;
-    OceanTest oceanTest;
+    OceanGerstnerTest oceanGerstnerTest;
+    OceanFFTTest oceanFFTTest;
     VesselTest vesselTest;
     BuoyancyTest buoyancyTest;
 
@@ -21,7 +22,8 @@ public class TestManager : MonoBehaviour
     enum TestCase
     {
         Performance,
-        Ocean,
+        OceanGerstner,
+        OceanFFT,
         Vessel,
         Buoyancy,
     }
@@ -29,7 +31,8 @@ public class TestManager : MonoBehaviour
     void OnEnable()
     {
         performanceTest = GetComponent<PerformanceTest>();
-        oceanTest = GetComponent<OceanTest>();
+        oceanGerstnerTest = GetComponent<OceanGerstnerTest>();
+        oceanFFTTest = GetComponent<OceanFFTTest>();
         vesselTest = GetComponent<VesselTest>();
         buoyancyTest = GetComponent<BuoyancyTest>();
 
@@ -48,8 +51,11 @@ public class TestManager : MonoBehaviour
             case TestCase.Performance:
                 performanceTest.Initialise();
                 break;
-            case TestCase.Ocean:
-                oceanTest.Initialise();
+            case TestCase.OceanGerstner:
+                oceanGerstnerTest.Initialise();
+                break;
+            case TestCase.OceanFFT:
+                oceanFFTTest.Initialise();
                 break;
             case TestCase.Vessel:
                 vesselTest.Initialise();
@@ -67,8 +73,11 @@ public class TestManager : MonoBehaviour
             case TestCase.Performance:
                 performanceTest.RunTest(waveGenerator, buoyancyModel, testVessel);
                 break;
-            case TestCase.Ocean:
-                oceanTest.RunTest();
+            case TestCase.OceanGerstner:
+                oceanGerstnerTest.RunTest(waveGenerator);
+                break;
+            case TestCase.OceanFFT:
+                oceanFFTTest.RunTest();
                 break;
             case TestCase.Vessel:
                 vesselTest.RunTest(waveGenerator, buoyancyModel);

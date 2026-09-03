@@ -7,6 +7,7 @@ using static BuoyancySolver;
 using UnityEngine.Rendering;
 using System.IO;
 using static GerstnerGeneration;
+using UnityEditor.ShaderGraph.Internal;
 
 public class OceanGerstnerTest : MonoBehaviour
 {
@@ -47,6 +48,20 @@ public class OceanGerstnerTest : MonoBehaviour
             this.generatedHeight = generatedHeight;
             this.predictedHeight = predictedHeight;
         }
+    }
+    List<PointMeasurement> pointMeasurements = new List<PointMeasurement>();
+    public struct PointMeasurement
+    {
+        public float time;
+        public float generatedHeight;
+        public float predictedHeight;
+        public PointMeasurement(float time, float generatedHeight, float predictedHeight)
+        {
+            this.time = time;
+            this.generatedHeight = generatedHeight;
+            this.predictedHeight = predictedHeight;
+        }
+
     }
 
     public void Initialise()
@@ -174,6 +189,10 @@ public class OceanGerstnerTest : MonoBehaviour
 
     void FillArray(OceanSample[] samples)
     {
+        float generatedHeight;
+        float predictedHeight;
+        float x;
+        float z;
         // Clear the measurements array first
         measurements.Clear();
 
@@ -188,15 +207,22 @@ public class OceanGerstnerTest : MonoBehaviour
             float localZ = (iZ - 0.5f) * patchSize;
 
             // Get the world x and y positions
-            float x = localX + patchCentre.x;
-            float z = localZ + patchCentre.z;
+            x = localX + patchCentre.x;
+            z = localZ + patchCentre.z;
 
-            float generatedHeight = samples[i].height;
-            float predictedHeight = CalculateGerstnerHeight(new Vector2(x, z));
+            generatedHeight = samples[i].height;
+            predictedHeight = CalculateGerstnerHeight(new Vector2(x, z));
             measurements.Add(new SurfaceMeasurement(x, z, generatedHeight, predictedHeight));
         }
 
         CalculateError();
+
+        // Store the position at the bottom left corner of the patch
+        generatedHeight = samples[0].height;
+        x = -0.5f + patchCentre.x;
+        z = -0.5f + patchCentre.z;
+        predictedHeight = CalculateGerstnerHeight(new Vector2(x, z));
+        pointMeasurements.Add(new PointMeasurement(Time.time, generatedHeight, predictedHeight));
     }
 
     float CalculateGerstnerHeight(Vector2 pos)
@@ -255,15 +281,14 @@ public class OceanGerstnerTest : MonoBehaviour
         {
             // CSV header
             writer.WriteLine(
-                "x,z,PredictedHeight,GeneratedHeight"
+                "time,PredictedHeight,GeneratedHeight"
             );
 
             // Data
-            foreach (SurfaceMeasurement point in measurements)
+            foreach (PointMeasurement point in pointMeasurements)
             {
                 writer.WriteLine(
-                    $"{point.x:F3}," +
-                    $"{point.z:F3}," +
+                    $"{point.time:F3}," +
                     $"{point.predictedHeight:F4}," +
                     $"{point.generatedHeight:F4},"
                 );

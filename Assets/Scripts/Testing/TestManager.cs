@@ -74,7 +74,7 @@ public class TestManager : MonoBehaviour
                 performanceTest.RunTest(waveGenerator, buoyancyModel, testVessel);
                 break;
             case TestCase.OceanGerstner:
-                oceanGerstnerTest.RunTest(waveGenerator);
+                oceanGerstnerTest.RunTest();
                 break;
             case TestCase.OceanFFT:
                 oceanFFTTest.RunTest();

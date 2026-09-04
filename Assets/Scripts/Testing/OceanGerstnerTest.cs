@@ -82,10 +82,10 @@ public class OceanGerstnerTest : MonoBehaviour
         // Disable the vessel game object
         testManager.buoyancySolver.gameObject.SetActive(false);
     }
-    public void RunTest(WaveGenerator waveGenerator)
+    public void RunTest()
     {
         // Set the active wave generator and initialise
-        oceanManager.activeWaveGenerator = waveGenerator;
+        oceanManager.activeWaveGenerator = WaveGenerator.Gerstner;
         oceanManager.Initialise();
 
         // Start the test
@@ -176,14 +176,16 @@ public class OceanGerstnerTest : MonoBehaviour
             gerstnerSampleBuffer,
             request =>
             {
-                readbackPending = false;
-
                 if (request.hasError)
+                {
+                    readbackPending = false;
                     return;
+                }
 
                 var samples = request.GetData<OceanSample>();
                 OceanSample[] oceanSampleArray = samples.ToArray();
                 FillArray(oceanSampleArray);
+                readbackPending = false;
             });
     }
 

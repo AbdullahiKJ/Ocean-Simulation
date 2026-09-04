@@ -23,7 +23,7 @@ public class FFTGeneration : MonoBehaviour, IWaveGeneration
         public float shortWavesFade;
     }
 
-    SpectrumSettings[] spectrums = new SpectrumSettings[4];
+    public SpectrumSettings[] spectrums = new SpectrumSettings[4];
 
     [System.Serializable]
     public struct DisplaySpectrumSettings

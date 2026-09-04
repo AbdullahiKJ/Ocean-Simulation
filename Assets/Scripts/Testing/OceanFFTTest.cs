@@ -15,9 +15,10 @@ public class OceanFFTTest : MonoBehaviour
     FFTCPU fftCPU;
     TextMeshProUGUI text;
     [SerializeField] ComputeShader fftCompute;
-    [SerializeField] float recordTime = 30.0f;
+    [SerializeField] int recordCount = 200;
     [SerializeField] float textUpdateInterval = 0.1f;
     [SerializeField] Vector3 patchCentre = new Vector3(100f, 0f, 100f);
+    int accumulatedCount = 0;
     float accumulatedTime = 0f;
     float textAccumulatedTime = 0f;
     bool testing = false;
@@ -92,19 +93,19 @@ public class OceanFFTTest : MonoBehaviour
         // Assign the FFTCPU parameters
         SetCPUUniforms();
         fftCPU._Spectrums = fftGeneration.spectrums;
-        fftCPU.SIZE = (uint)patchResolution;
+        fftCPU.SIZE = (uint)oceanManager.meshResolution;
         fftCPU.LOG_SIZE = (uint)Mathf.Log(fftCPU.SIZE, 2);
         fftCPU.fftGroupBuffer = new Vector4[2, fftCPU.SIZE];
 
         // Create the initial spectrum texture, spectrum texture and displacement texture
-        fftCPU._InitialSpectrumTextures = new Vector4[patchResolution, patchResolution, fftGeneration.layerCount * 2];
-        fftCPU._DisplacementTextures = new Vector4[patchResolution, patchResolution, fftGeneration.layerCount * 2];
-        fftCPU._SpectrumTextures = new Vector4[patchResolution, patchResolution, fftGeneration.layerCount * 4];
+        fftCPU._InitialSpectrumTextures = new Vector4[oceanManager.meshResolution, oceanManager.meshResolution, fftGeneration.layerCount * 2];
+        fftCPU._DisplacementTextures = new Vector4[oceanManager.meshResolution, oceanManager.meshResolution, fftGeneration.layerCount * 2];
+        fftCPU._SpectrumTextures = new Vector4[oceanManager.meshResolution, oceanManager.meshResolution, fftGeneration.layerCount * 4];
 
         // Initialize the FFT spectrum
-        for (int i = 0; i < patchResolution; i++)
+        for (int i = 0; i < oceanManager.meshResolution; i++)
         {
-            for (int j = 0; j < patchResolution; j++)
+            for (int j = 0; j < oceanManager.meshResolution; j++)
             {
                 Vector3Int id = new Vector3Int(i, j, 0);
                 fftCPU.CS_InitializeSpectrum(id);
@@ -112,9 +113,9 @@ public class OceanFFTTest : MonoBehaviour
         }
 
         // Then pack the conjugates
-        for (int i = 0; i < patchResolution; i++)
+        for (int i = 0; i < oceanManager.meshResolution; i++)
         {
-            for (int j = 0; j < patchResolution; j++)
+            for (int j = 0; j < oceanManager.meshResolution; j++)
             {
                 Vector3Int id = new Vector3Int(i, j, 0);
                 fftCPU.CS_PackSpectrumConjugate(id);
@@ -147,17 +148,18 @@ public class OceanFFTTest : MonoBehaviour
             if (textAccumulatedTime >= textUpdateInterval)
             {
                 // Update the text
-                float roundedTime = recordTime - accumulatedTime;
+                float roundedTime = accumulatedTime;
                 roundedTime = (float)Math.Round(roundedTime, 1);
-                text.text = "Time Remaining: " + roundedTime + "s";
+                text.text = "Time Remaining: " + roundedTime + "s"
+                + "\nSamples Collected: " + accumulatedCount + "/" + recordCount;
                 textAccumulatedTime = 0f;
             }
 
-            if (accumulatedTime >= recordTime)
+            if (accumulatedCount >= recordCount)
             {
                 // Reset trackers for the next interval
+                accumulatedCount = 0;
                 accumulatedTime = 0.0f;
-                textAccumulatedTime = 0.0f;
 
                 // Log the findings
                 WriteCSV();
@@ -190,6 +192,7 @@ public class OceanFFTTest : MonoBehaviour
             {
                 sampleTime = Time.time;
                 GetSample();
+                accumulatedCount++;
             }
         }
     }
@@ -238,28 +241,52 @@ public class OceanFFTTest : MonoBehaviour
 
         for (int i = 0; i < samples.Length; i++)
         {
-            // Get the x and z grid positions based off the index
-            float iX = (float)(i % patchResolution) / (patchResolution - 1);
-            float iZ = (float)(i / patchResolution) / (patchResolution - 1);
+            // Position within the 32x32 sample patch
+            int patchX = i % patchResolution;
+            int patchZ = i / patchResolution;
 
-            // Get the local x and z positions relative to the patch centre
-            float localX = (iX - 0.5f) * patchSize;
-            float localZ = (iZ - 0.5f) * patchSize;
+            // Match the GPU's sample-centre convention
+            float iX = (patchX + 0.5f) / patchResolution;
+            float iZ = (patchZ + 0.5f) / patchResolution;
 
-            // Get the world x and y positions
-            x = localX + patchCentre.x;
-            z = localZ + patchCentre.z;
+            // World position of this sample
+            x = patchCentre.x + (iX - 0.5f) * patchSize;
+            z = patchCentre.z + (iZ - 0.5f) * patchSize;
 
             generatedHeight = samples[i].height;
-            // Get the predicted height
-            int xIndex = i % patchResolution;
-            int zIndex = i / patchResolution;
+
+            // Convert world position into FFT grid coordinates
+            float fftU = x / oceanManager.meshSize;
+            float fftV = z / oceanManager.meshSize;
+
+            int xIndex = Mathf.Clamp(
+                Mathf.RoundToInt(fftU * (oceanManager.meshResolution - 1)),
+                0,
+                oceanManager.meshResolution - 1
+            );
+
+            int zIndex = Mathf.Clamp(
+                Mathf.RoundToInt(fftV * (oceanManager.meshResolution - 1)),
+                0,
+                oceanManager.meshResolution - 1
+            );
+
+            // Get predicted height from the corresponding FFT location
             predictedHeight = 0f;
+
             for (int layer = 0; layer < fftGeneration.layerCount; layer++)
             {
                 predictedHeight += fftCPU._DisplacementTextures[xIndex, zIndex, layer].y;
             }
-            measurements.Add(new SurfaceMeasurement(x, z, generatedHeight, predictedHeight));
+
+            measurements.Add(
+                new SurfaceMeasurement(
+                    x,
+                    z,
+                    generatedHeight,
+                    predictedHeight
+                )
+            );
         }
 
         CalculateError();
@@ -282,9 +309,9 @@ public class OceanFFTTest : MonoBehaviour
         SetCPUUniforms();
 
         // 1. Generate the time-dependent spectrum for every point
-        for (int x = 0; x < patchResolution; x++)
+        for (int x = 0; x < oceanManager.meshResolution; x++)
         {
-            for (int y = 0; y < patchResolution; y++)
+            for (int y = 0; y < oceanManager.meshResolution; y++)
             {
                 Vector3Int id = new Vector3Int(x, y, 0);
                 fftCPU.CS_UpdateSpectrumForFFT(id);
@@ -294,21 +321,21 @@ public class OceanFFTTest : MonoBehaviour
         fftCPU._FourierTarget = fftCPU._SpectrumTextures;
 
         // 2. Perform horizontal FFT for every row
-        for (int y = 0; y < patchResolution; y++)
+        for (int y = 0; y < oceanManager.meshResolution; y++)
         {
             fftCPU.CS_HorizontalFFT(y);
         }
 
         // 3. Perform vertical FFT for every column
-        for (int x = 0; x < patchResolution; x++)
+        for (int x = 0; x < oceanManager.meshResolution; x++)
         {
             fftCPU.CS_VerticalFFT(x);
         }
 
         // 4. Convert Fourier data into displacement maps
-        for (int x = 0; x < patchResolution; x++)
+        for (int x = 0; x < oceanManager.meshResolution; x++)
         {
-            for (int y = 0; y < patchResolution; y++)
+            for (int y = 0; y < oceanManager.meshResolution; y++)
             {
                 Vector3Int id = new Vector3Int(x, y, 0);
                 fftCPU.CS_AssembleMaps(id);
@@ -365,11 +392,11 @@ public class OceanFFTTest : MonoBehaviour
         fftCPU._FrameTime = sampleTime * fftGeneration.speed;
         fftCPU._Gravity = fftGeneration.gravity;
         fftCPU._RepeatTime = fftGeneration.repeatTime;
-        fftCPU._N = (uint)patchResolution;
+        fftCPU._N = (uint)oceanManager.meshResolution;
         fftCPU._Seed = (uint)fftGeneration.seed;
         fftCPU._LengthScale0 = (uint)fftGeneration.lengthScale1;
         fftCPU._LengthScale1 = (uint)fftGeneration.lengthScale2;
-        fftCPU._MeshSize = patchSize;
+        fftCPU._MeshSize = oceanManager.meshSize;
         fftCPU._Depth = fftGeneration.depth;
         fftCPU._LowCutoff = fftGeneration.lowCutoff;
         fftCPU._HighCutoff = fftGeneration.highCutoff;

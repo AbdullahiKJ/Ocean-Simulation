@@ -61,6 +61,7 @@ public class UIManager : MonoBehaviour
         // Set the mass for the active buoyancy model
         SetBuoyancyMass(buoyancyModel);
 
+        // Set the selected button to the default wave generation and buoyancy models
         oceanGroup.SelectButton(oceanGroup.GetButtonByIndex((int)waveGenerator - 1));
         buoyancyGroup.SelectButton(buoyancyGroup.GetButtonByIndex((int)buoyancyModel - 1));
 
@@ -141,6 +142,9 @@ public class UIManager : MonoBehaviour
                 ToggleCollider(true);
                 break;
         }
+
+        // Assign the current simulation state to the settings panel
+        simulationGroup.SelectButton(option);
 
         // Disable the start menu panel
         startMenuPanel.SetActive(false);

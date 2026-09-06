@@ -1,3 +1,4 @@
+using Unity.Cinemachine;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -7,6 +8,7 @@ public class UIManager : MonoBehaviour
     [SerializeField] GameObject startMenuPanel;
     [SerializeField] GameObject optionsMenuPanel;
     [SerializeField] GameObject controlsPanel;
+    [SerializeField] GameObject freeControlsPanel;
     [SerializeField] GameObject confirmClosePanel;
 
     [Header("Button Groups")]
@@ -14,14 +16,20 @@ public class UIManager : MonoBehaviour
     [SerializeField] SelectableButtonGroup oceanGroup;
     [SerializeField] SelectableButtonGroup buoyancyGroup;
 
-
     [Header("Simulation")]
     [SerializeField] GameObject vesselGO;
-    [SerializeField] Vector3 defaultPos = new Vector3(100f, 0f, 100f);
     [SerializeField] OceanManager oceanManager;
+    [SerializeField] GameObject freeFlyGO;
+    [SerializeField] Vector3 defaultOceanPos = new Vector3(100f, 10f, 100f);
+    [SerializeField] Vector3 defaultVesselPos = new Vector3(100f, 0f, 100f);
     BuoyancySolver buoyancySolver;
     [SerializeField] WaveGenerator waveGenerator;
     [SerializeField] BuoyancyModel buoyancyModel;
+
+    [Header("Cameras")]
+    [SerializeField] CinemachineCamera freeCamera;
+    [SerializeField] CinemachineCamera vesselCamera;
+    [SerializeField] CinemachineCamera startMenuCamera;
 
     void Awake()
     {
@@ -29,6 +37,7 @@ public class UIManager : MonoBehaviour
         startMenuPanel.SetActive(true);
         optionsMenuPanel.SetActive(false);
         controlsPanel.SetActive(false);
+        freeControlsPanel.SetActive(false);
         confirmClosePanel.SetActive(false);
 
         // Lock the vessel x and z position
@@ -43,6 +52,9 @@ public class UIManager : MonoBehaviour
         buoyancySolver.activeModel = buoyancyModel;
         oceanGroup.SelectButton(oceanGroup.GetButtonByIndex((int)waveGenerator - 1));
         buoyancyGroup.SelectButton(buoyancyGroup.GetButtonByIndex((int)buoyancyModel - 1));
+
+        // Set the default camera to the start menu camera
+        CameraTransition(2);
     }
 
     void OnSettings(InputValue inputValue)
@@ -54,10 +66,26 @@ public class UIManager : MonoBehaviour
     {
         // Toggle the options menu panel
         bool isActive = optionsMenuPanel.activeSelf;
-        optionsMenuPanel.SetActive(!isActive);
+        bool isNowActive = !isActive;
+        optionsMenuPanel.SetActive(isNowActive);
 
         // Set the time scale to 0 to pause the simulation and 1 to resume the simulation
-        Time.timeScale = isActive ? 1f : 0f;
+        Time.timeScale = isNowActive ? 0f : 1f;
+
+        // Show or hide the cursor
+        ToggleCursor(isNowActive);
+    }
+
+    void ToggleCursor(bool isVisible)
+    {
+        // Lock the cursor to the centre of the screen and hide
+        Cursor.lockState = isVisible ? CursorLockMode.None : CursorLockMode.Locked;
+        Cursor.visible = isVisible;
+    }
+
+    void ToggleFreeControlsPanel(bool isVisible)
+    {
+        freeControlsPanel.SetActive(isVisible);
     }
 
     public void StartGame(int option)
@@ -81,6 +109,16 @@ public class UIManager : MonoBehaviour
 
         // Enable the controls panel
         controlsPanel.SetActive(true);
+
+        // Enable the free controls panel if the free camera is active
+        ToggleFreeControlsPanel(option == 0);
+
+        // Hide the cursor
+        ToggleCursor(false);
+
+        // Remove the vessel constraints to allow movement
+        Rigidbody vesselRigidbody = vesselGO.GetComponent<Rigidbody>();
+        vesselRigidbody.constraints = RigidbodyConstraints.None;
     }
 
     public void CameraTransition(int option)
@@ -88,10 +126,22 @@ public class UIManager : MonoBehaviour
         switch (option)
         {
             case 0:
-                // Transition to the ocean simulation camera
+                // Switch to the free camera
+                startMenuCamera.Priority = 0;
+                freeCamera.Priority = 10;
+                vesselCamera.Priority = 0;
                 break;
             case 1:
-                // Transition to the vessel camera
+                // Switch to the vessel camera
+                startMenuCamera.Priority = 0;
+                freeCamera.Priority = 0;
+                vesselCamera.Priority = 10;
+                break;
+            case 2:
+                // Switch to the start menu camera
+                startMenuCamera.Priority = 10;
+                freeCamera.Priority = 0;
+                vesselCamera.Priority = 0;
                 break;
         }
     }
@@ -135,17 +185,28 @@ public class UIManager : MonoBehaviour
         int simulationIndex = simulationGroup.ActiveButtonIndex;
         if (simulationIndex == 1)
         {
-            vesselGO.transform.position = defaultPos;
+            vesselGO.SetActive(true);
+            vesselGO.transform.position = defaultVesselPos;
             vesselGO.transform.rotation = Quaternion.identity;
         }
         else
         {
             // If the vessel simulation is not active, disable the vessel game object
             vesselGO.SetActive(false);
+
+            // Reset the ocean position and rotation
+            freeFlyGO.transform.position = defaultOceanPos;
+            freeFlyGO.transform.rotation = Quaternion.identity;
         }
 
         // Exit the options menu panel
         ToggleMenu();
+
+        // Toggle the free controls panel if the free camera/ocean simulation is active
+        ToggleFreeControlsPanel(simulationIndex == 0);
+
+        // Switch to the appropriate camera based on the active simulation
+        CameraTransition(simulationIndex);
     }
 
     public void ExitGame()

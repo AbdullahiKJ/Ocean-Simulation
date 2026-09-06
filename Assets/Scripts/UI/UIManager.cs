@@ -19,12 +19,19 @@ public class UIManager : MonoBehaviour
     [Header("Simulation")]
     [SerializeField] GameObject vesselGO;
     [SerializeField] OceanManager oceanManager;
+    [SerializeField] GameObject spaceColliders;
     [SerializeField] GameObject freeFlyGO;
     [SerializeField] Vector3 defaultOceanPos = new Vector3(100f, 10f, 100f);
     [SerializeField] Vector3 defaultVesselPos = new Vector3(100f, 0f, 100f);
     BuoyancySolver buoyancySolver;
+    Rigidbody vesselRigidbody;
     [SerializeField] WaveGenerator waveGenerator;
     [SerializeField] BuoyancyModel buoyancyModel;
+
+    [Header("Buoyancy")]
+    [SerializeField] float voxelMass = 50000f;
+    [SerializeField] float volumeMass = 50000f;
+    [SerializeField] float partitionedMass = 50000f;
 
     [Header("Cameras")]
     [SerializeField] CinemachineCamera freeCamera;
@@ -41,7 +48,7 @@ public class UIManager : MonoBehaviour
         confirmClosePanel.SetActive(false);
 
         // Lock the vessel x and z position
-        Rigidbody vesselRigidbody = vesselGO.GetComponent<Rigidbody>();
+        vesselRigidbody = vesselGO.GetComponent<Rigidbody>();
         vesselRigidbody.constraints = RigidbodyConstraints.FreezePositionX | RigidbodyConstraints.FreezePositionZ;
 
         // Get the buoyancy solver from the ocean manager
@@ -50,6 +57,10 @@ public class UIManager : MonoBehaviour
         // Set the default ocean simulation and buoyancy model
         oceanManager.activeWaveGenerator = waveGenerator;
         buoyancySolver.activeModel = buoyancyModel;
+
+        // Set the mass for the active buoyancy model
+        SetBuoyancyMass(buoyancyModel);
+
         oceanGroup.SelectButton(oceanGroup.GetButtonByIndex((int)waveGenerator - 1));
         buoyancyGroup.SelectButton(buoyancyGroup.GetButtonByIndex((int)buoyancyModel - 1));
 
@@ -60,6 +71,25 @@ public class UIManager : MonoBehaviour
     void OnSettings(InputValue inputValue)
     {
         ToggleMenu();
+    }
+
+    void SetBuoyancyMass(BuoyancyModel model)
+    {
+        switch (buoyancySolver.activeModel)
+        {
+            case BuoyancyModel.Voxel:
+                buoyancySolver.vesselMass = voxelMass;
+                vesselRigidbody.mass = voxelMass;
+                break;
+            case BuoyancyModel.Volume:
+                buoyancySolver.vesselMass = volumeMass;
+                vesselRigidbody.mass = volumeMass;
+                break;
+            case BuoyancyModel.Partitioned:
+                buoyancySolver.vesselMass = partitionedMass;
+                vesselRigidbody.mass = partitionedMass;
+                break;
+        }
     }
 
     void ToggleMenu()
@@ -83,6 +113,12 @@ public class UIManager : MonoBehaviour
         Cursor.visible = isVisible;
     }
 
+    void ToggleCollider(bool isEnabled)
+    {
+        // Enable or disable the vessel collider
+        spaceColliders.SetActive(isEnabled);
+    }
+
     void ToggleFreeControlsPanel(bool isVisible)
     {
         freeControlsPanel.SetActive(isVisible);
@@ -96,11 +132,13 @@ public class UIManager : MonoBehaviour
                 // Start the game with only the ocean simulation
                 vesselGO.SetActive(false);
                 CameraTransition(0);
+                ToggleCollider(false);
                 break;
             case 1:
                 // Start the game with the ocean and vessel simulation
                 vesselGO.SetActive(true);
                 CameraTransition(1);
+                ToggleCollider(true);
                 break;
         }
 
@@ -117,7 +155,6 @@ public class UIManager : MonoBehaviour
         ToggleCursor(false);
 
         // Remove the vessel constraints to allow movement
-        Rigidbody vesselRigidbody = vesselGO.GetComponent<Rigidbody>();
         vesselRigidbody.constraints = RigidbodyConstraints.None;
     }
 
@@ -177,6 +214,8 @@ public class UIManager : MonoBehaviour
                 buoyancySolver.activeModel = BuoyancyModel.Partitioned;
                 break;
         }
+        // Set the mass for the active buoyancy model
+        SetBuoyancyMass(buoyancySolver.activeModel);
 
         // Reinitialise the ocean simulation
         oceanManager.Initialise();
@@ -188,11 +227,13 @@ public class UIManager : MonoBehaviour
             vesselGO.SetActive(true);
             vesselGO.transform.position = defaultVesselPos;
             vesselGO.transform.rotation = Quaternion.identity;
+            ToggleCollider(true);
         }
         else
         {
             // If the vessel simulation is not active, disable the vessel game object
             vesselGO.SetActive(false);
+            ToggleCollider(false);
 
             // Reset the ocean position and rotation
             freeFlyGO.transform.position = defaultOceanPos;

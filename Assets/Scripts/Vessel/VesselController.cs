@@ -6,6 +6,7 @@ public class VesselController : MonoBehaviour
 
     [SerializeField] float acceleration = 10f;
     [SerializeField] float turnSpeed = 60f;
+    [SerializeField] UIManager uiManager;
 
     Rigidbody rb;
 
@@ -21,6 +22,13 @@ public class VesselController : MonoBehaviour
 
     void Update()
     {
+        if (uiManager != null)
+        {
+            // Ignore input if the menu is open
+            if (uiManager.IsMenuOpen)
+                return;
+        }
+
         // Calculate the propulsion force from player input
         propulsionForce = transform.forward * movementY * acceleration;
     }

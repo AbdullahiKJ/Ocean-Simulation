@@ -14,6 +14,8 @@ public class FreeFlyController : MonoBehaviour
     [SerializeField] private float maxLookAngle = 89f;
     [SerializeField] CinemachineCamera freeCamera;
 
+    [SerializeField] UIManager uiManager;
+
     private Vector2 movementInput;
     private Vector2 lookInput;
 
@@ -23,6 +25,13 @@ public class FreeFlyController : MonoBehaviour
 
     private void Update()
     {
+        if (uiManager != null)
+        {
+            // Ignore input if the menu is open
+            if (uiManager.IsMenuOpen)
+                return;
+        }
+
         HandleLook();
         HandleMovement();
     }

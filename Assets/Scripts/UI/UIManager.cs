@@ -38,8 +38,13 @@ public class UIManager : MonoBehaviour
     [SerializeField] CinemachineCamera vesselCamera;
     [SerializeField] CinemachineCamera startMenuCamera;
 
+    public bool IsMenuOpen => optionsMenuPanel.activeSelf;
+
     void Awake()
     {
+        // Set the target frame rate for the demo to 60 frames per second
+        Application.targetFrameRate = 60;
+
         // Disable all panels except the start menu panel
         startMenuPanel.SetActive(true);
         optionsMenuPanel.SetActive(false);
@@ -93,7 +98,7 @@ public class UIManager : MonoBehaviour
         }
     }
 
-    void ToggleMenu()
+    public void ToggleMenu()
     {
         // Toggle the options menu panel
         bool isActive = optionsMenuPanel.activeSelf;

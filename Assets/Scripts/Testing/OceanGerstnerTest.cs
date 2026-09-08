@@ -7,7 +7,6 @@ using static BuoyancySolver;
 using UnityEngine.Rendering;
 using System.IO;
 using static GerstnerGeneration;
-using UnityEditor.ShaderGraph.Internal;
 
 public class OceanGerstnerTest : MonoBehaviour
 {

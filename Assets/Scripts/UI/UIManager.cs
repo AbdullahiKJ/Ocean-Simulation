@@ -221,8 +221,9 @@ public class UIManager : MonoBehaviour
         // Set the mass for the active buoyancy model
         SetBuoyancyMass(buoyancySolver.activeModel);
 
-        // Reinitialise the ocean simulation
+        // Reinitialise the ocean simulation and the buoyancy solver
         oceanManager.Initialise();
+        buoyancySolver.Initialise();
 
         // If the vessel simulation is active, reset the vessel position and rotation
         int simulationIndex = simulationGroup.ActiveButtonIndex;

@@ -54,6 +54,11 @@ public class BuoyancySolver : MonoBehaviour
 
     void Start()
     {
+        Initialise();
+    }
+
+    public void Initialise()
+    {
         // Get the rigid body and assign the vessel mass
         rb = GetComponent<Rigidbody>();
         rb.mass = vesselMass;

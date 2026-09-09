@@ -13,12 +13,12 @@ MonoBehaviour:
   m_Name: Regular
   m_EditorClassIdentifier: Assembly-CSharp::GerstnerPreset
   gerstner:
-    waveCount: 75
-    steepnessParameter: 0.05
+    waveCount: 50
+    steepnessParameter: 0.035
     directionRange: {x: 0, y: 360}
-    medianWavelength: 9.5
-    medianAmplitude: 0.1
-    wavelengthRange: 6
+    medianWavelength: 11
+    medianAmplitude: 0.075
+    wavelengthRange: 5
   fft:
     seed: 20
     lowCutoff: 0.0001
